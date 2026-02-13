@@ -11,7 +11,6 @@ nc <- nc_open("temp_data_SRS.nc")
 
 
 ###### Initial Look at data ----------------------------------------------------
-hello world 
 print(nc)
 names(nc$dim)
 names(nc$var)
@@ -38,7 +37,7 @@ dim(time)
 # Check temporal units
 t_units <- ncatt_get(nc, "time", "units")
 t_units
-c(time[1]/356, time[1344]/365)
+c(time[1]/365, time[1344]/365)
 # ~112 years of data, however time step are not uniform (as month length varies)
 
 
@@ -50,20 +49,15 @@ c(date[1], date[1344])
 # Data ranges from 16/01/1901 to 16/12/2012
 
 
-# Visualise Day earliest and latest days 
-temp_day1 <- temp[,,1]
-temp_day1344 <- temp[,,1344]
-
 
 # Compare heatmaps same day 111 years apart
-par(mfrow = c(2,1))
-image.plot(temp_day1, col = rev(brewer.pal(10,"RdBu")), main = "Global Temp 01/1901")
-image.plot(temp_day1344, col = rev(brewer.pal(10,"RdBu")), main ="Global Temp 01/2012")
+par(mfrow = c(2,1), mar = c(3,3,2,5))
+image.plot(temp[,,1], col = rev(brewer.pal(10,"RdBu")), main = "Global Temp 01/1901")
+image.plot(temp[,,1344], col = rev(brewer.pal(10,"RdBu")), main ="Global Temp 01/2012")
 
-
-# Difference 111 years apart 
-diff_temp = temp_day1344 - temp_day1
-image.plot(diff_temp, col = rev(brewer.pal(10,"RdBu")), main ="Temp differences 111 years apart")
+# Difference in temperature 111 years apart 
+dev.off()
+image.plot(temp[,,1344] - temp[,,1], col = rev(brewer.pal(10,"RdBu")), main ="Temp differences 111 years apart")
 
 
 # Split data by seasons
@@ -73,26 +67,25 @@ ii_summer <- grep("-06-|-07-|-08-", date)
 ii_autumn <- grep("-09-|-10-|-11-", date)
 
 
-# winter_temp <- temp[,,ii_winter]
-# spring_temp <- temp[,,ii_spring]
-# summer_temp <- temp[,,ii_summer]
-# autumn_temp <- temp[,,ii_autumn]
+ii_warm <- sort(c(ii_spring, ii_summer))
+ii_cold <- sort(c(ii_autumn, ii_winter))
 
 
-# Consider one region for eda - Ireland 
+# Consider one region for EDA - Ireland 
 # Longitide (-10, 40), Latitude (35, 72)
 ireland_lon_ii <- which(lon > -10.5 & lon < -5.5)
 ireland_lat_ii <- which(lat > 51.5 & lat < 55.5)
 
-boxplot(as.vector(temp[ireland_lon_ii, ireland_lat_ii, ii_winter[1:50]]),
-        as.vector(temp[ireland_lon_ii, ireland_lat_ii, ii_winter[51:100]]),
-        as.vector(temp[ireland_lon_ii, ireland_lat_ii, ii_winter[101:150]]),
-        as.vector(temp[ireland_lon_ii, ireland_lat_ii, ii_winter[151:250]]),
-        as.vector(temp[ireland_lon_ii, ireland_lat_ii, ii_winter[251:300]]),
-        as.vector(temp[ireland_lon_ii, ireland_lat_ii, ii_winter[301:350]]))
+temp_ire <- temp[ireland_lon_ii, ireland_lat_ii,]
+rm(temp)
+
+boxplot(as.vector(temp_ire[,, ii_warm[1:112]]),
+        as.vector(temp_ire[,, ii_warm[113:224]]),
+        as.vector(temp_ire[,, ii_warm[225:336]]),
+        as.vector(temp_ire[,, ii_warm[337:448]]),
+        as.vector(temp_ire[,, ii_warm[449:560]]),
+        as.vector(temp_ire[,, ii_warm[561:672]]))
 
 
-# Consider sampling places in units to reduce computational load
-# Split into yearly chuncks and check boxplots along
-# Take yearly averages ?
+
 
