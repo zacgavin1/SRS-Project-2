@@ -11,7 +11,7 @@ nc <- nc_open("temp_data_SRS.nc")
 
 
 ###### Initial Look at data ----------------------------------------------------
-
+hello world 
 print(nc)
 names(nc$dim)
 names(nc$var)
