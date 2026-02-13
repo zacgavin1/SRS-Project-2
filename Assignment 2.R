@@ -4,8 +4,10 @@ library(lubridate)
 library(RColorBrewer)
 library(lattice)
 library(fields)
+library(terra)
 
-setwd("C:\\Users\\Luke Egan\\OneDrive\\Desktop\\Statistical Research Skills\\Assignment 2")
+# setwd("C:\\Users\\Luke Egan\\OneDrive\\Desktop\\Statistical Research Skills\\Assignment 2")
+setwd("C:/Users/zgavi/Documents/Edinburgh Term 2/SRS")
 # unzip("temp_data_SRS.nc.zip")
 nc <- nc_open("temp_data_SRS.nc")
 
@@ -48,12 +50,47 @@ date <- ymd(t_dstr) +ddays(time)
 c(date[1], date[1344])
 # Data ranges from 16/01/1901 to 16/12/2012
 
+# -----------------------------------------------------
+# putting the data into a SpatRaster - don't use the data
+# in this form for a while
+rast_temp <- rast(
+  aperm(temp, c(2, 1, 3)),
+  extent=c(xmin = min(lon),
+           xmax = max(lon),
+           ymin = min(lat),
+           ymax = max(lat)),
+  crs = "EPSG:4326"
+)
+names(rast_temp) <- as.character(date)
+
+# making weird dataframe
+df <- terra::as.data.frame(rast_temp, xy = TRUE)
+
+# Manually reshape (base R, memory safer than pivot_longer)
+coords <- df[, 1:2]
+vals   <- df[, -c(1,2)]
+
+df_temp <- data.frame(
+         lon = rep(coords$x, times = ncol(vals)),
+         lat = rep(coords$y, times = ncol(vals)),
+         date = rep(names(vals), each = nrow(vals)),
+         temperature = as.vector(as.matrix(vals))
+)
+# df_temp is now in tidy form
+dim(df_temp)
+names(df_temp)
+head(df_temp)
+
+# -------------------------------------------------------
+
 
 
 # Compare heatmaps same day 111 years apart
 par(mfrow = c(2,1), mar = c(3,3,2,5))
 image.plot(temp[,,1], col = rev(brewer.pal(10,"RdBu")), main = "Global Temp 01/1901")
 image.plot(temp[,,1344], col = rev(brewer.pal(10,"RdBu")), main ="Global Temp 01/2012")
+
+
 
 # Difference in temperature 111 years apart 
 dev.off()
@@ -73,18 +110,37 @@ ii_cold <- sort(c(ii_autumn, ii_winter))
 
 # Consider one region for EDA - Ireland 
 # Longitide (-10, 40), Latitude (35, 72)
-ireland_lon_ii <- which(lon > -10.5 & lon < -5.5)
-ireland_lat_ii <- which(lat > 51.5 & lat < 55.5)
+ireland_lon_ii <- which(lon > -10 & lon < 0)
+ireland_lat_ii <- which(lat > 50 & lat < 55)
 
 temp_ire <- temp[ireland_lon_ii, ireland_lat_ii,]
-rm(temp)
 
+
+par(mfrow=c(1,2))
 boxplot(as.vector(temp_ire[,, ii_warm[1:112]]),
         as.vector(temp_ire[,, ii_warm[113:224]]),
         as.vector(temp_ire[,, ii_warm[225:336]]),
         as.vector(temp_ire[,, ii_warm[337:448]]),
         as.vector(temp_ire[,, ii_warm[449:560]]),
         as.vector(temp_ire[,, ii_warm[561:672]]))
+
+boxplot(as.vector(temp_ire[,, ii_cold[1:112]]),
+        as.vector(temp_ire[,, ii_cold[113:224]]),
+        as.vector(temp_ire[,, ii_cold[225:336]]),
+        as.vector(temp_ire[,, ii_cold[337:448]]),
+        as.vector(temp_ire[,, ii_cold[449:560]]),
+        as.vector(temp_ire[,, ii_cold[561:672]]))
+
+
+
+mean_loc = apply(temp_ire, 3, mean, na.rm=T)
+plot(mean_loc[ii_summer])
+
+
+
+
+
+
 
 
 
