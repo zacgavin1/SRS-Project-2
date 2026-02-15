@@ -6,6 +6,9 @@ library(lattice)
 library(fields)
 library(terra)
 
+
+# Add an extra line for your personal file path and comment out as appropriate
+
 # setwd("C:\\Users\\Luke Egan\\OneDrive\\Desktop\\Statistical Research Skills\\Assignment 2")
 setwd("C:/Users/zgavi/Documents/Edinburgh Term 2/SRS")
 # unzip("temp_data_SRS.nc.zip")
@@ -50,9 +53,10 @@ date <- ymd(t_dstr) +ddays(time)
 c(date[1], date[1344])
 # Data ranges from 16/01/1901 to 16/12/2012
 
+
 # -----------------------------------------------------
-# putting the data into a SpatRaster - don't use the data
-# in this form for a while
+# putting the data into a regular df in tidy form - don't use the 
+# data in this form for a while
 rast_temp <- rast(
   aperm(temp, c(2, 1, 3)),
   extent=c(xmin = min(lon),
