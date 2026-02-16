@@ -5,12 +5,12 @@ library(RColorBrewer)
 library(lattice)
 library(fields)
 library(terra)
-
+library(data.table)
 
 # Add an extra line for your personal file path and comment out as appropriate
 
-# setwd("C:\\Users\\Luke Egan\\OneDrive\\Desktop\\Statistical Research Skills\\Assignment 2")
-setwd("C:/Users/zgavi/Documents/Edinburgh Term 2/SRS")
+setwd("C:\\Users\\Luke Egan\\OneDrive\\Desktop\\Statistical Research Skills\\Assignment 2")
+# setwd("C:/Users/zgavi/Documents/Edinburgh Term 2/SRS")
 # unzip("temp_data_SRS.nc.zip")
 nc <- nc_open("temp_data_SRS.nc")
 
@@ -50,7 +50,8 @@ c(time[1]/365, time[1344]/365)
 t_ustr <- strsplit(t_units$value, " ")
 t_dstr <- strsplit(unlist(t_ustr)[3], "-")
 date <- ymd(t_dstr) +ddays(time)
-c(date[1], date[1344])
+
+# c(date[1], date[1344])
 # Data ranges from 16/01/1901 to 16/12/2012
 
 
@@ -74,10 +75,20 @@ df <- terra::as.data.frame(rast_temp, xy = TRUE)
 coords <- df[, 1:2]
 vals   <- df[, -c(1,2)]
 
+# Seasonal Factor
+month <- as.POSIXlt(date)$mon + 1
+
+seasons <- factor((month %% 12) %/% 3 + 1,
+                  labels = c("winter", "spring", "summer", "autumn"))
+
+# EDIT LUKE: Changed "date" to maintain "Date" class/format
+# EDIT LUKE: Inserted season factor column
 df_temp <- data.frame(
          lon = rep(coords$x, times = ncol(vals)),
          lat = rep(coords$y, times = ncol(vals)),
-         date = rep(names(vals), each = nrow(vals)),
+         date = rep(date, each = nrow(vals)),
+         # date = rep(names(vals), each = nrow(vals)),
+         seasons = rep(seasons, each = nrow(vals)),
          temperature = as.vector(as.matrix(vals))
 )
 # df_temp is now in tidy form
@@ -86,9 +97,24 @@ names(df_temp)
 head(df_temp)
 
 # -------------------------------------------------------
+# Looking further at tidy data and putting seasonal factor column in
+# Tried to put seasonal factor column in here but was very inefficient
+# Should consider "data.table" R package. See link below for details
+# https://r-datatable.com/
+
+# Also consider "dplyr" package for dealing with tidy data
+# -------------------------------------------------------
+library(rlang)
+library(dplyr)
+
+# TO DO: Check if lat and lon is correct in tidy data format
+range(lat)
+range(df_temp$lat)
 
 
 
+
+# -------------------------------------------------------
 # Compare heatmaps same day 111 years apart
 par(mfrow = c(2,1), mar = c(3,3,2,5))
 image.plot(temp[,,1], col = rev(brewer.pal(10,"RdBu")), main = "Global Temp 01/1901")
