@@ -58,6 +58,8 @@ date <- ymd(t_dstr) +ddays(time)
 # -----------------------------------------------------
 # putting the data into a regular df in tidy form - don't use the 
 # data in this form for a while
+
+#### NOTE::: This doesn't work at the moment
 rast_temp <- rast(
   aperm(temp, c(2, 1, 3)),
   extent=c(xmin = min(lon),
@@ -71,7 +73,7 @@ names(rast_temp) <- as.character(date)
 # making weird dataframe
 df <- terra::as.data.frame(rast_temp, xy = TRUE)
 
-# Manually reshape (base R, memory safer than pivot_longer)
+# Manually reshape 
 coords <- df[, 1:2]
 vals   <- df[, -c(1,2)]
 
@@ -140,7 +142,7 @@ ii_cold <- sort(c(ii_autumn, ii_winter))
 
 # Consider one region for EDA - Ireland 
 # Longitide (-10, 40), Latitude (35, 72)
-ireland_lon_ii <- which(lon > -10 & lon < 0)
+ireland_lon_ii <- which(lon > -10 & lon < -5)
 ireland_lat_ii <- which(lat > 50 & lat < 55)
 
 temp_ire <- temp[ireland_lon_ii, ireland_lat_ii,]
@@ -163,12 +165,82 @@ boxplot(as.vector(temp_ire[,, ii_cold[1:112]]),
 
 
 
-mean_loc = apply(temp_ire, 3, mean, na.rm=T)
-plot(mean_loc[ii_summer])
+
+############################################################
+###### ----- Maximum Yearly Temperatures -------- ##########
+############################################################
+
+# Look at yearly maxima in Ireland - global maxima don't really mean that much 
+
+# first just take maxima over each observation time
+obs_max_ire <- apply(temp_ire, 3, max, na.rm=T) 
+
+# get the year of each set of observations
+year <- as.integer(gsub("-[0-9][0-9]-[0-9][0-9]","", date)) 
+years <- unique(year)
+
+yearly_max_ire <- rep(NA, length(years))
+for (i in years){
+  yearly_max_ire[i-1900] <- max(obs_max_ire[year==i])
+}
+
+yearly_max_ire
+plot(years, yearly_max_ire)
+# unfortunately this plot really doesn't show anything useful in terms of trend
+
+# try another small area
+eq_lon_ii <- which(lon > -100 & lon < -95)
+eq_lat_ii <- which(lat > 40 & lat < 45)
+temp_eq <- temp[eq_lon_ii, eq_lat_ii,]
+
+obs_max_eq <- apply(temp_eq, 3, max, na.rm=T) 
+yearly_max_eq <- rep(NA, length(years))
+for (i in years){
+  yearly_max_eq[i-1900] <- max(obs_max_eq[year==i])
+}
+yearly_max_eq
+plot(years, yearly_max_eq, ylab="yearly max temp observation")
+
+# notes: for -5<lat<0, 0<lon<10 have weird set of equal max and min from 1920-40
+
+# For some regions there is some increase, but overall there is no real 
+# upward trend in maxima here
 
 
 
 
+############################################################
+######## ------- Overall trend over time -------- ##########
+############################################################
+
+# we'll just take the global yearly mean, and plot it over time
+
+obs_mean <- apply(temp, 3, mean, na.rm=T) # this takes a while
+yearly_mean <- rep(NA, length(years))
+for (i in years){
+  yearly_mean[i-1900] <- max(obs_mean[year==i])
+}
+
+
+plot(years, yearly_mean - mean(yearly_mean[1:20]))
+fit <- smooth.spline(years, yearly_mean - mean(yearly_mean[1:20]))
+lines(fit, col="purple", lwd="2")
+# wait, climate change is real??
+
+
+##### 
+# Does this differ for the northern and southern hemispheres?
+#####
+obs_meann <- apply(temp, 3, mean, na.rm=T) # this takes a while
+yearly_mean <- rep(NA, length(years))
+for (i in years){
+  yearly_mean[i-1900] <- max(obs_mean[year==i])
+}
+
+
+plot(years, yearly_mean - mean(yearly_mean[1:20]))
+fit <- smooth.spline(years, yearly_mean - mean(yearly_mean[1:20]))
+lines(fit, col="purple", lwd="2")
 
 
 
