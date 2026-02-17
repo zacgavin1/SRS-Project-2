@@ -8,6 +8,7 @@ library(terra)
 
 
 # Add an extra line for your personal file path and comment out as appropriate
+#little change to check git push is working
 
 # setwd("C:\\Users\\Luke Egan\\OneDrive\\Desktop\\Statistical Research Skills\\Assignment 2")
 setwd("C:/Users/zgavi/Documents/Edinburgh Term 2/SRS")
