@@ -380,14 +380,14 @@ abline(lm(amp ~ seq_along(amp)), col = "red" )
 
 
 # Plot phases
-plot(phase, type = "b" , col = "black")
-abline(lm(phase ~ seq_along(phase)), col = "red" )
+plot(phase %% 12 , type = "b" , col = "black")
+abline(lm((phase %% 12) ~ seq_along((phase %% 12))), col = "red" )
 
 # Use phases to find which month is temp highest and lowest to see if summer/winter
 # seasons are starting earlier/later
 
 # Highest temp occurs when 2*pi*m/12 - phase = 0 -> m = 12*phase/2*pi
-# Because were measuring months in radians, we can get monthly values not in [1,12]
+# Because we're measuring months in rads, we can get monthly values not in [1,12]
 # Modulo operator used to ensure correct values
 
 
