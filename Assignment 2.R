@@ -245,6 +245,168 @@ lines(fit, col="purple", lwd="2")
 
 
 
+############################################################
+######## --------- Seasonal Periodicity --------- ##########
+############################################################
+
+# Monthly mean temp over Ireland coordinates
+obs_ire_mean <- apply(temp_ire, 3, mean, na.rm = T)
+obs_ire_mean
+# Create data frame including relevant data
+df_ire <- data.frame(
+  date = date,
+  mean_temps = obs_ire_mean
+)
+df_ire
+df_ire$month <- as.numeric(format(df_ire$date, "%m"))
+df_ire$year <- as.numeric(format(df_ire$date, "%Y"))
+
+monthly_temps <- split(df_ire$mean_temps, df_ire$month)
+
+
+#### As a start, look at seasonal data averaged over entire time period
+yearly_temps_by_month <- sapply(monthly_temps, mean)
+
+plot(1:12, yearly_temps_by_month, xlab = "Month" , ylab = "Mean Temp")
+fit <- smooth.spline(1:12, yearly_temps_by_month)
+lines(fit, col = "purple")
+## Not really useful
+
+
+#### Split data into 14 year sections and compute
+split_data <- lapply(monthly_temps, function(x) {
+  intervals <- ceiling(seq_along(x) / 14)
+  tapply(x, intervals, mean)
+} )
+
+split_data_matrix = matrix(0, nrow = 12, ncol = 8)
+for(i in 1:12){
+  split_data_matrix[i,] <- split_data[[i]]
+}
+
+fits = list()
+for(i in 1:8){
+  fits[[i]] <- smooth.spline(1:12, split_data_matrix[,i])
+}
+
+plot(NULL,
+     xlim = c(1,12),
+     ylim = range(split_data_matrix),
+     xaxt = "n",
+     xlab = "Month",
+     ylab = "Mean Temperature")
+axis(1, at = 1:12, labels = month.abb)
+
+# Manually put in values 1:8 corresponding to 14 year blocks
+lines(fits[[8]], col = "brown")
+
+# Amplitudes are increasing over blocks and overall larger mean temps each month
+
+
+#### Fit Harmonic model to data 
+# https://stats.stackexchange.com/questions/60994/fit-a-sinusoidal-term-to-data
+# http://www-stat.wharton.upenn.edu/%7Estine/stat910/lectures/06_harmonic_regr.pdf
+# A lot of sources recommend time series model 
+
+sin_term <- sin((2*pi*1:12)/12)
+cos_term <- cos((2*pi*1:12)/12)
+
+harm_models = list()
+for(i in 1:8){
+  harm_models[[i]] <- lm(split_data_matrix[,i] ~ sin_term + cos_term)
+}
+fitted_vals <- lapply(harm_models, predict)
+
+plot(NULL,
+     xlim = c(1,12),
+     ylim = range(split_data_matrix),
+     xaxt = "n",
+     xlab = "Month",
+     ylab = "Mean Temperature")
+axis(1, at = 1:12, labels = month.abb)
+split_data_matrix
+# Manually put in values 1:8 corresponding to 14 year blocks
+plot(1:12, split_data_matrix[,8], col = "orange")
+lines(fitted_vals[[1]], col = "orange")
+lines(fitted_vals[[8]], col = "green")
+
+# Calculate the amplitude and phase from harmonic fits. Intercept represents mean
+# temperature over 14 year periods
+amp = c()
+phase = c()
+for(i in 1:8){
+  mod <- harm_models[[i]]
+  amp[i] <- sqrt((coef(mod)[2])^2 + (coef(mod)[3])^2)
+  phase[i] <- atan2(coef(mod)[3], coef(mod)[2])
+}
+
+
+#### Last two analyses were done using 14 year average. Instead fit harmonic
+# models for each year and compare amplitudes and phase shifts 
+
+year_month_temp_mat <- matrix(0, nrow = 112, ncol = 12)
+for(i in 1:12){
+  year_month_temp_mat[,i] <- monthly_temps[[i]]
+}
+
+beta0 <- c()
+amp <- c()
+phase <- c()
+
+for(i in 1:nrow(year_month_temp_mat)){
+  mod <- lm(year_month_temp_mat[i,] ~ sin_term + cos_term)
+  coefs <- coef(mod)
+  
+  beta0[i] <- coefs[1]
+  amp[i] <- sqrt( (coefs[2])^2 + (coefs[3])^2)
+  phase[i] <- atan2(coefs[2], coefs[3])
+  
+}
+
+# Plot the intercepts (Yearly mean temp) with a line representing the trend in 
+# these fitted values
+plot(beta0, type = "b" , col = "black")
+abline(lm(beta0 ~ seq_along(beta0)), col = "red" )
+
+# Note that models are of the form:
+# Temp_m = beta0 + beta1*sin(2pi*month/12)+beta2*cos(2pi*month/12) + (error)
+# But this can be rewritten in non-linear form as 
+# Temp_m = beta0 + Amp*cos(2pi*m/12 - phase) + (error)
+# So this is what is represented by amplitude and phase
+
+# Plot amplitudes 
+plot(amp, type = "b" , col = "black")
+abline(lm(amp ~ seq_along(amp)), col = "red" )
+
+
+# Plot phases
+plot(phase, type = "b" , col = "black")
+abline(lm(phase ~ seq_along(phase)), col = "red" )
+
+# Use phases to find which month is temp highest and lowest to see if summer/winter
+# seasons are starting earlier/later
+
+# Highest temp occurs when 2*pi*m/12 - phase = 0 -> m = 12*phase/2*pi
+# Because were measuring months in radians, we can get monthly values not in [1,12]
+# Modulo operator used to ensure correct values
+
+
+highest_month <-  (phase * (12/(2*pi))) %% 12
+plot(highest_month, type="b", main="Highest Temp Month")
+abline(lm(highest_month ~ seq_along(highest_month)), col = "red" )
+
+# Lowest temp occurs when 2*pi*m/12 - phase = pi -> m = (-12*phase + pi)/2*pi
+lowest_month <- ((phase + pi) *12/(2*pi)) %% 12
+plot(lowest_month, type="b", main="Lowest Temp Month")
+abline(lm(lowest_month ~ seq_along(highest_month)), col = "red" )
+
+
+# Extra Notes: 
+# 1) Can be done using R-package:
+# https://rdrr.io/cran/HarmonicRegression/man/harmonic.regression.html
+# 2) Information/Intro for harmonic regression used above
+# https://www.mdpi.com/1660-4601/17/4/1318
+# This reference may also be useful for extensions
 
 
 
