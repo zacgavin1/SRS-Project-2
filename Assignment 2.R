@@ -10,8 +10,8 @@ library(data.table)
 # Add an extra line for your personal file path and comment out as appropriate
 #little change to check git push is working
 
-setwd("C:\\Users\\Luke Egan\\OneDrive\\Desktop\\Statistical Research Skills\\Assignment 2")
-# setwd("C:/Users/zgavi/Documents/Edinburgh Term 2/SRS")
+# setwd("C:\\Users\\Luke Egan\\OneDrive\\Desktop\\Statistical Research Skills\\Assignment 2")
+setwd("C:/Users/zgavi/Documents/Edinburgh Term 2/SRS")
 # unzip("temp_data_SRS.nc.zip")
 nc <- nc_open("temp_data_SRS.nc")
 
@@ -232,22 +232,24 @@ lines(fit, col="purple", lwd="2")
 ##### 
 # Does this differ for the northern and southern hemispheres?
 #####
-obs_meann <- apply(temp, 3, mean, na.rm=T) # this takes a while
+par(mfrow=c(1,2)) # so we see them next to each other
+obs_meann <- apply(temp[,0:90,], 3, mean, na.rm=T) # this takes a while
 yearly_mean <- rep(NA, length(years))
 for (i in years){
   yearly_mean[i-1900] <- max(obs_mean[year==i])
 }
 
-
-plot(years, yearly_mean - mean(yearly_mean[1:20]))
+# plot where the baseline is average temp at start of 20th century 
+plot(years, yearly_mean - mean(yearly_mean[1:20])) 
 fit <- smooth.spline(years, yearly_mean - mean(yearly_mean[1:20]))
 lines(fit, col="purple", lwd="2")
 
+# nope not really, they both show essentially the same thing
 
 
-############################################################
-######## --------- Seasonal Periodicity --------- ##########
-############################################################
+############################################################ ###################
+######## --------- Seasonal Periodicity --------- ########## ###################
+############################################################ ###################
 
 # Monthly mean temp over Ireland coordinates
 obs_ire_mean <- apply(temp_ire, 3, mean, na.rm = T)
@@ -298,7 +300,17 @@ plot(NULL,
 axis(1, at = 1:12, labels = month.abb)
 
 # Manually put in values 1:8 corresponding to 14 year blocks
-lines(fits[[8]], col = "brown")
+cols <- colorRampPalette(c("blue", "red"))(8)
+lines(fits[[1]],col=cols[1] )
+lines(fits[[2]],col=cols[2] )
+lines(fits[[3]],col=cols[3] )
+lines(fits[[4]],col=cols[4] )
+lines(fits[[5]],col=cols[5] )
+lines(fits[[6]],col=cols[6] )
+lines(fits[[7]],col=cols[7] )
+lines(fits[[8]],col=cols[8] )
+
+
 
 # Amplitudes are increasing over blocks and overall larger mean temps each month
 
@@ -407,6 +419,127 @@ abline(lm(lowest_month ~ seq_along(highest_month)), col = "red" )
 # 2) Information/Intro for harmonic regression used above
 # https://www.mdpi.com/1660-4601/17/4/1318
 # This reference may also be useful for extensions
+
+
+# It seems that the idea here is 
+# temp=(overall trend)+(seasonal effects)+(noise), and then we are 
+# looking at how the seasonal affects change over time?
+
+
+################################################
+## - model checking & model generalisations - ##
+################################################
+
+par(mfrow=c(1,1))
+monthly_mean <- sapply(monthly_temps, mean)
+plot(monthly_mean, ylim=c(3,16))
+mod_check <- lm(monthly_mean~sin_term+cos_term)
+lines(mod_check$fitted.values)
+
+plot(mod_check) # "U" shaped residual plot
+
+
+# Try second (and third) order terms to remove errors
+
+sin2_term <- sin((4*pi*1:12)/12); cos2_term <- cos((4*pi*1:12)/12)
+sin3_term <- sin((6*pi*1:12)/12); cos3_term <- cos((6*pi*1:12)/12)
+  
+mod_2check <- lm(monthly_mean~sin_term+cos_term +sin2_term+cos2_term)
+lines(mod_2check$fitted.values)
+plot(mod_2check) # still not perfect, but gets rid of "U" errors
+
+mod_3check <- lm(monthly_mean~sin_term+cos_term +sin2_term+cos2_term+
+                 cos3_term+sin3_term)
+
+# Model checking: compare AICs (recall: 2*p-2*log-lik )
+AIC(mod_check) # 20.2
+AIC(mod_2check) # -7.17
+AIC(mod_3check) # -4.73
+# suggesting that the model with the second order terms might be the
+# best option for the split into 8/ yearly regressions
+# Looking online, people comment that the temp peaks are too sharp to 
+# be captured by the first order models, and so use second order
+
+
+######################################
+## - implement second order model - ##
+######################################
+
+sin_term <- sin((2*pi*1:12)/12); cos_term <- cos((2*pi*1:12)/12)
+sin2_term <- sin((4*pi*1:12)/12); cos2_term <- cos((4*pi*1:12)/12)
+
+## First for each of the 8 blocks 
+harm_models2 = list()
+for(i in 1:8){
+  harm_models2[[i]] <- lm(split_data_matrix[,i] ~ sin_term + cos_term+
+                            sin2_term+ cos2_term)
+}
+fitted_vals2 <- lapply(harm_models2, predict)
+
+
+# plot to demonstrate the fit changing across time
+plot(NULL,
+     xlim = c(1,12),
+     ylim = range(split_data_matrix),
+     xaxt = "n",
+     xlab = "Month",
+     ylab = "Mean Temperature")
+axis(1, at = 1:12, labels = month.abb)
+# Manually put in values 1:8 corresponding to 14 year blocks
+plot(1:12, split_data_matrix[,8], col = "orange")
+lines(fitted_vals2[[1]], col = "orange")
+lines(fitted_vals2[[8]], col = "green")
+lines(fitted_vals[[8]], col="red") # comparison to first order
+
+
+# amplitude and phase analysis changes a bit here
+# NOT COMPLETE YET
+amp = c()
+phase = c()
+for(i in 1:8){
+  mod <- harm_models2[[i]]
+  amp[i] <- sqrt((coef(mod)[2])^2 + (coef(mod)[3])^2)
+  phase[i] <- atan2(coef(mod)[3], coef(mod)[2])
+}
+
+plot(amp)      # phase of 
+plot(phase)
+plot(sapply(harm_models2, function(x) coef(x)[1])) # intercept v time
+
+
+## now for each year individually
+year_month_temp_mat <- matrix(0, nrow = 112, ncol = 12)
+for(i in 1:12){
+  year_month_temp_mat[,i] <- monthly_temps[[i]]
+}
+
+beta0 <- c()
+amp <- c()
+phase <- c()
+
+for(i in 1:nrow(year_month_temp_mat)){
+  mod <- lm(year_month_temp_mat[i,] ~ sin_term + cos_term+
+              sin2_term+cos2_term)
+  coefs <- coef(mod)
+  
+  beta0[i] <- coefs[1]
+  amp[i] <- sqrt( (coefs[2])^2 + (coefs[3])^2) 
+  phase[i] <- atan2(coefs[2], coefs[3]) # amp and phase won't quite work again
+  
+}
+
+# fit models for each 
+intmod <- lm(beta0~years); 
+ampmod <- lm(amp~years)
+phasemod <- lm(phase~years)
+
+plot(years,beta0); lines(years, intmod$fitted.values); summary(intmod)
+plot(years, amp); lines(years, ampmod$fitted.values); summary(ampmod)
+plot(years, phase); lines(years, phasemod$fitted.values); summary(phasemod)
+
+
+
+
 
 
 
