@@ -143,8 +143,8 @@ ii_cold <- sort(c(ii_autumn, ii_winter))
 
 # Consider one region for EDA - Ireland 
 # Longitide (-10, 40), Latitude (35, 72)
-ireland_lon_ii <- which(lon > -10 & lon < -5)
-ireland_lat_ii <- which(lat > 50 & lat < 55)
+ireland_lon_ii <- which(lon > -10 & lon < 0)
+ireland_lat_ii <- which(lat > 50 & lat <55 )
 
 temp_ire <- temp[ireland_lon_ii, ireland_lat_ii,]
 
@@ -232,8 +232,12 @@ lines(fit, col="purple", lwd="2")
 ##### 
 # Does this differ for the northern and southern hemispheres?
 #####
+
+study_lon_ii <- which(lon > -10 & lon < 0)
+study_lat_ii <- which(lat > 50 & lat <55 )
+
 par(mfrow=c(1,2)) # so we see them next to each other
-obs_meann <- apply(temp[,0:90,], 3, mean, na.rm=T) # this takes a while
+obs_meann <- apply(temp[,study_lat_ii,], 3, mean, na.rm=T) # this takes a while
 yearly_mean <- rep(NA, length(years))
 for (i in years){
   yearly_mean[i-1900] <- max(obs_mean[year==i])
@@ -566,6 +570,18 @@ pacf(decomp$random, na.action=na.omit)
 ## I'm not convinced by any of this yet
 # I don't quite know what Q I'm trying to answer here. 
 # I'm not sure how this will let us get at a change in the seasonality
+
+
+
+########################################################
+########## ------ some other stuff ------- #############
+########################################################
+
+
+
+
+
+
 
 
 
