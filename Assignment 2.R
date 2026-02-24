@@ -143,8 +143,8 @@ ii_cold <- sort(c(ii_autumn, ii_winter))
 
 # Consider one region for EDA - Ireland 
 # Longitide (-10, 40), Latitude (35, 72)
-ireland_lon_ii <- which(lon > -10 & lon < 0)
-ireland_lat_ii <- which(lat > 50 & lat <55 )
+ireland_lon_ii <- which(lon > 26 & lon < 31)
+ireland_lat_ii <- which(lat > 39 & lat <42 )
 
 temp_ire <- temp[ireland_lon_ii, ireland_lat_ii,]
 
@@ -219,36 +219,48 @@ plot(years, yearly_max_eq, ylab="yearly max temp observation")
 obs_mean <- apply(temp, 3, mean, na.rm=T) # this takes a while
 yearly_mean <- rep(NA, length(years))
 for (i in years){
-  yearly_mean[i-1900] <- max(obs_mean[year==i])
+  yearly_mean[i-1900] <- mean(obs_mean[year==i])
 }
 
 
-plot(years, yearly_mean - mean(yearly_mean[1:20]))
+plot(years, yearly_mean - mean(yearly_mean[1:20]), ylim=c(-.3,1.5))
 fit <- smooth.spline(years, yearly_mean - mean(yearly_mean[1:20]))
 lines(fit, col="purple", lwd="2")
 # wait, climate change is real??
 
 
 ##### 
-# Does this differ for the northern and southern hemispheres?
+# Does this differ in the North Atlantic region?
 #####
 
-study_lon_ii <- which(lon > -10 & lon < 0)
-study_lat_ii <- which(lat > 50 & lat <55 )
+NA_lon_ii<-which(lon > -80 & lon < 30); NA_lat_ii<-which(lat > 0 & lat <80 )
+east_lon_ii<-which(lon>50 & lon <180); east_lat_ii<-which(lat>-80&lat<80)
 
-par(mfrow=c(1,2)) # so we see them next to each other
-obs_meann <- apply(temp[,study_lat_ii,], 3, mean, na.rm=T) # this takes a while
-yearly_mean <- rep(NA, length(years))
+# setting up the yearly mean temperatures in each region for plotting
+obs_meane <- apply(temp[east_lon_ii,east_lat_ii,], 3, mean, na.rm=T) # this takes a while
+yearly_mean_east <- rep(NA, length(years))
 for (i in years){
-  yearly_mean[i-1900] <- max(obs_mean[year==i])
+  yearly_mean_east[i-1900] <- mean(obs_meane[year==i], na.omit=T)
 }
 
-# plot where the baseline is average temp at start of 20th century 
-plot(years, yearly_mean - mean(yearly_mean[1:20])) 
-fit <- smooth.spline(years, yearly_mean - mean(yearly_mean[1:20]))
-lines(fit, col="purple", lwd="2")
+obs_meanNA <- apply(temp[NA_lon_ii,NA_lat_ii,], 3, mean, na.rm=T)
+yearly_mean_NA <- rep(NA, length(years))
+for (i in years){
+  yearly_mean_NA[i-1900] <- mean(obs_meanNA[year==i], na.omit=T)
+}
 
-# nope not really, they both show essentially the same thing
+par(mfrow=c(1,2))
+# plot where the baseline is average temp at start of 20th century 
+plot(years, yearly_mean_east - mean(yearly_mean_east[1:20]), ylim=c(-.3,1.5), main="Eastern Hemisphere") 
+fit <- smooth.spline(years, yearly_mean_east - mean(yearly_mean_east[1:20]))
+lines(fit, col="purple", lwd="2") # this is eastern hem
+
+plot(years, yearly_mean_NA - mean(yearly_mean_NA[1:20]), ylim=c(-.3,1.5), main="North Atlantic region") 
+fit <- smooth.spline(years, yearly_mean_NA - mean(yearly_mean_NA[1:20]), penalty=1.5)
+lines(fit, col="purple", lwd="2") # this is NA region
+
+# There is a more pronounced increase in the North Atlantic region during 
+# the 40s peak compared to the eastern hemisphere
 
 
 ############################################################ ###################
@@ -356,6 +368,9 @@ for(i in 1:8){
   phase[i] <- atan2(coef(mod)[3], coef(mod)[2])
 }
 
+plot(amp)
+plot(phase)
+
 
 #### Last two analyses were done using 14 year average. Instead fit harmonic
 # models for each year and compare amplitudes and phase shifts 
@@ -393,7 +408,7 @@ abline(lm(beta0 ~ seq_along(beta0)), col = "red" )
 # Plot amplitudes 
 plot(amp, type = "b" , col = "black")
 abline(lm(amp ~ seq_along(amp)), col = "red" )
-
+modamp <- lm(amp~seq_along(amp)); summary(modamp)
 
 # Plot phases
 plot(phase %% 12 , type = "b" , col = "black")
@@ -576,6 +591,13 @@ pacf(decomp$random, na.action=na.omit)
 ########################################################
 ########## ------ some other stuff ------- #############
 ########################################################
+
+# Try to fit a hierarchical model of lm for amplitude -> harmonic regression for seasons
+# for each point in space. Then plot colour map of the amplitude
+
+
+
+
 
 
 
