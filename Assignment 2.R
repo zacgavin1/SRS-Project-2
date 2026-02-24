@@ -547,21 +547,16 @@ library(SWMPr)
 
 # Steps done:
 # 1) decompose time series into trend, seasonal and stationary parts
-# 2) fit 
+# 2) Then what?
 
 
-ts_ymtm <- ts(year_month_temp_mat, start=c(1900,1), frequency =12)
-filtered <- filter(obs_ire_mean, rep(1/12, 12), sides=2 )
-pacf(filtered, na.action=na.omit) # seems like maybe an AR(1)?
-
-
-# need to interpolate missing values 
-
-ts_data <- ts(obs_ire_mean, start=c(1901,1), frequency=12)
+ts_data <- ts(obs_ire_mean, start=c(1901,1), frequency=12) # making a class time series object
 decomp <- decompose(ts_data, type = "additive")
 plot(decomp)
 plot(decomp$trend)      # get a similar overall shape to yearly mean over time
 plot(decomp$seasonal[1:36]) # just a few cycles here
+
+plot()
 
 # looking at stationary part
 acf(decomp$random, na.action=na.omit)
@@ -571,3 +566,6 @@ pacf(decomp$random, na.action=na.omit)
 ## I'm not convinced by any of this yet
 # I don't quite know what Q I'm trying to answer here. 
 # I'm not sure how this will let us get at a change in the seasonality
+
+
+
