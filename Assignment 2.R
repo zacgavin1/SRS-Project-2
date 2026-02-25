@@ -595,15 +595,33 @@ pacf(decomp$random, na.action=na.omit)
 # Try to fit a hierarchical model of lm for amplitude -> harmonic regression for seasons
 # for each point in space. Then plot colour map of the amplitude
 
+sin_term <- sin((2*pi*1:12)/12); cos_term <- cos((2*pi*1:12)/12)
+sin2_term <- sin((4*pi*1:12)/12); cos2_term <- cos((4*pi*1:12)/12)
 
+test_lon_ii <- which(lon > 0 & lon < 41)
+test_lat_ii <- which(lat > -80 & lat <80 )
+temp_test <- temp[test_lon_ii, test_lat_ii,]
 
+n_lat <- length(test_lat_ii)
+n_lon <- length(test_lon_ii)
 
+mods <- matrix(vector("list", n_lat * n_lon),
+               nrow = n_lat,
+               ncol = n_lon)
 
-
-
-
-
-
+for (i in 1:n_lon){
+  for (j in 1:n_lat){
+    if (!is.na(temp_test[i,j,1])){
+      mods[[j,i]] <- coef(lm(temp_test[i,j,1:12] ~ sin_term + 
+                          cos_term+sin2_term+cos2_term))
+    }
+  }
+  print(i)
+}
+# if we tried to do this 112 times this would take forever 
+# (and would be 720*360*112=29030400 lms to fit)
+# maybe we could average over small areas to reduce dimensionality?
+# or fit a model every second year
 
 
 
