@@ -598,43 +598,57 @@ pacf(decomp$random, na.action=na.omit)
 sin_term <- sin((2*pi*1:12)/12); cos_term <- cos((2*pi*1:12)/12)
 sin2_term <- sin((4*pi*1:12)/12); cos2_term <- cos((4*pi*1:12)/12)
 
-test_lon_ii <- which(lon > 0 & lon < 41)
-test_lat_ii <- which(lat > -40 & lat <80 )
+test_lon_ii <- which(lon > 10 & lon < 40)
+test_lat_ii <- which(lat > 20 & lat <40 )
 temp_test <- temp[test_lon_ii, test_lat_ii,]
 
 n_lat <- length(test_lat_ii)
 n_lon <- length(test_lon_ii)
+`
+ints <- array(rep(0, n_lat * n_lon *56), c(n_lon, n_lat, 56))
+amps <- array(rep(NA, n_lat * n_lon *56), c(n_lon, n_lat, 56))
 
-mods_start <- matrix(rep(0, n_lat * n_lon), nrow = n_lon, ncol = n_lat)
-mods_end <- matrix(rep(0, n_lat * n_lon), nrow = n_lon, ncol = n_lat)
-
-for (i in 1:n_lon){
-  for (j in 1:n_lat){
-    if (!is.na(temp_test[i,j,1])){
-      mods_start[i,j] <- coef(lm(temp_test[i,j,1:12] ~ sin_term + 
-                          cos_term+sin2_term+cos2_term))[1]
-    } else mods[i,j] <- NA
+for (y in 1:56){
+  for (i in 1:n_lon){
+    for (j in 1:n_lat){
+      if (!is.na(temp_test[i,j,1])){
+        mod <- lm(temp_test[i,j,(24*(y-1)+1):((24*(y-1))+12)] ~ sin_term + 
+             cos_term+sin2_term+cos2_term)
+        ints[i,j, y] <- coef(mod)[1]
+        amps[i,j,y] <- .5*(max(mod$fitted.values)-min(mod$fitted.values))
+      } else ints[i,j,y ] <- amps[i,j,y] <- NA
+    }
+    
   }
-  print(i)
+  print(y)
 }
 
-for (i in 1:n_lon){
-  for (j in 1:n_lat){
-    if (!is.na(temp_test[i,j,1])){
-      mods_start[i,j] <- coef(lm(temp_test[i,j,1332:1344] ~ sin_term + 
-                                   cos_term+sin2_term+cos2_term))[1]
-    } else mods_end[i,j] <- NA
-  }
-  print(i)
-}
+
 # if we tried to do this 112 times this would take forever 
 # (and would be 720*360*112=29030400 lms to fit)
 # maybe we could average over small areas to reduce dimensionality?
 # or fit a model every second year
+`
 
 
-
-image.plot(mods, col = rev(brewer.pal(10,"RdBu")))
-
+image.plot(mods[,,1], col = rev(brewer.pal(10,"RdBu")))
 
 
+intmod <- matrix(rep(0, n_lat*n_lon), n_lon, n_lat)
+ampmod <- matrix(rep(0, n_lat*n_lon), n_lon, n_lat)
+
+for (i in 1:n_lon){
+  for (j in 1:n_lat){
+    if (!is.na(temp_test[i,j,1])){
+      intmod[i,j] <- coef(lm(ints[i,j,]~ seq_along(ints[i,j,])))[2]
+      ampmod[i,j] <- coef(lm(amps[i,j,]~ seq_along(ints[i,j,])))[2]
+    } else intmod[i,j] <- ampmod[i,j] <- NA
+  }
+}
+
+
+image.plot(intmod*56, col = rev(brewer.pal(10,"RdBu")))
+
+image.plot(ampmod*56, col = rev(brewer.pal(10,"RdBu")))
+
+           
