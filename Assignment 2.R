@@ -646,6 +646,11 @@ for (i in 1:n_lon){
   }
 }
 
+#### Plotting the heatmaps
+data <- read.csv("ints.csv")
+my_matrix <- as.matrix(data)
+ampmod <- as.matrix(read.csv("amps.csv"))
+
 lim <- max(abs(intmod*56), na.rm = TRUE)
 image.plot(intmod*56, col = rev(brewer.pal(10,"RdBu")), zlim=c(-lim,lim))
 
