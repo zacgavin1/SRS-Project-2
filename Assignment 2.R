@@ -451,211 +451,211 @@ abline(lm(lowest_month ~ seq_along(highest_month)), col = "red" )
 # looking at how the seasonal affects change over time?
 
 
-################################################
-## - model checking & model generalisations - ##
-################################################
-
-par(mfrow=c(1,1))
-monthly_mean <- sapply(monthly_temps, mean)
-plot(monthly_mean, ylim=c(3,16))
-mod_check <- lm(monthly_mean~sin_term+cos_term)
-lines(mod_check$fitted.values)
-
-plot(mod_check) # "U" shaped residual plot
-
-
-# Try second (and third) order terms to remove errors
-
-sin2_term <- sin((4*pi*1:12)/12); cos2_term <- cos((4*pi*1:12)/12)
-sin3_term <- sin((6*pi*1:12)/12); cos3_term <- cos((6*pi*1:12)/12)
-  
-mod_2check <- lm(monthly_mean~sin_term+cos_term +sin2_term+cos2_term)
-lines(mod_2check$fitted.values)
-plot(mod_2check) # still not perfect, but gets rid of "U" errors
-
-mod_3check <- lm(monthly_mean~sin_term+cos_term +sin2_term+cos2_term+
-                 cos3_term+sin3_term)
-
-# Model checking: compare AICs (recall: 2*p-2*log-lik )
-AIC(mod_check) # 20.2
-AIC(mod_2check) # -7.17
-AIC(mod_3check) # -4.73
-# suggesting that the model with the second order terms might be the
-# best option for the split into 8/ yearly regressions
-# Looking online, people comment that the temp peaks are too sharp to 
-# be captured by the first order models, and so use second order
-
-
-######################################
-## - implement second order model - ##
-######################################
-
-sin_term <- sin((2*pi*1:12)/12); cos_term <- cos((2*pi*1:12)/12)
-sin2_term <- sin((4*pi*1:12)/12); cos2_term <- cos((4*pi*1:12)/12)
-
-## First for each of the 8 blocks 
-harm_models2 = list()
-for(i in 1:8){
-  harm_models2[[i]] <- lm(split_data_matrix[,i] ~ sin_term + cos_term+
-                            sin2_term+ cos2_term)
-}
-fitted_vals2 <- lapply(harm_models2, predict)
-
-
-# plot to demonstrate the fit changing across time
-plot(NULL,
-     xlim = c(1,12),
-     ylim = range(split_data_matrix),
-     xaxt = "n",
-     xlab = "Month",
-     ylab = "Mean Temperature")
-axis(1, at = 1:12, labels = month.abb)
-# Manually put in values 1:8 corresponding to 14 year blocks
-plot(1:12, split_data_matrix[,8], col = "orange")
-lines(fitted_vals2[[1]], col = "orange")
-lines(fitted_vals2[[8]], col = "green")
-lines(fitted_vals[[8]], col="red") # comparison to first order
-
-
-# amplitude and phase analysis changes a bit here
-# NOT COMPLETE YET
-amp = c()
-phase = c()
-for(i in 1:8){
-  mod <- harm_models2[[i]]
-  amp[i] <- sqrt((coef(mod)[2])^2 + (coef(mod)[3])^2)
-  phase[i] <- atan2(coef(mod)[3], coef(mod)[2])
-}
-
-plot(amp)      # phase of 
-plot(phase)
-plot(sapply(harm_models2, function(x) coef(x)[1])) # intercept v time
-
-
-## now for each year individually
-year_month_temp_mat <- matrix(0, nrow = 112, ncol = 12)
-for(i in 1:12){
-  year_month_temp_mat[,i] <- monthly_temps[[i]]
-}
-
-beta0 <- c()
-amp <- c()
-phase <- c()
-
-for(i in 1:nrow(year_month_temp_mat)){
-  mod <- lm(year_month_temp_mat[i,] ~ sin_term + cos_term+
-              sin2_term+cos2_term)
-  coefs <- coef(mod)
-  
-  beta0[i] <- coefs[1]
-  amp[i] <- (max(mod$fitted.values)-min(mod$fitted.values))*.5
-  phase[i] <- which(mod$fitted.values==max(mod$fitted.values))
-  
-}
-
-# fit models for each 
-intmod <- lm(beta0~years); 
-ampmod <- lm(amp~years)
-phasemod <- lm(phase~years)
-
-plot(years,beta0); lines(years, intmod$fitted.values); summary(intmod)
-plot(years, amp); lines(years, ampmod$fitted.values); summary(ampmod)
-plot(years, phase); lines(years, phasemod$fitted.values); summary(phasemod)
-
-
-
-
-##################################################################
-######## ---- Investigating seasonal ARIMA models ---- ###########
-##################################################################
-library(SWMPr)
-
-# Steps done:
-# 1) decompose time series into trend, seasonal and stationary parts
-# 2) Then what?
-
-
-ts_data <- ts(obs_ire_mean, start=c(1901,1), frequency=12) # making a class time series object
-decomp <- decompose(ts_data, type = "additive")
-plot(decomp)
-plot(decomp$trend)      # get a similar overall shape to yearly mean over time
-plot(decomp$seasonal[1:36]) # just a few cycles here
-
-plot()
-
-# looking at stationary part
-acf(decomp$random, na.action=na.omit)
-pacf(decomp$random, na.action=na.omit)
-
-
-## I'm not convinced by any of this yet
-# I don't quite know what Q I'm trying to answer here.
-# I'm not sure how this will let us get at a change in the seasonality
-
-
-
-########################################################
-########## ------ some other stuff ------- #############
-########################################################
-
-# Try to fit a hierarchical model of lm for amplitude -> harmonic regression for seasons
-# for each point in space. Then plot colour map of the amplitude
-
-sin_term <- sin((2*pi*1:12)/12); cos_term <- cos((2*pi*1:12)/12)
-sin2_term <- sin((4*pi*1:12)/12); cos2_term <- cos((4*pi*1:12)/12)
-
-test_lon_ii <- which(lon > 10 & lon < 40)
-test_lat_ii <- which(lat > 20 & lat <40 )
-temp_test <- temp[test_lon_ii, test_lat_ii,]
-
-n_lat <- length(test_lat_ii)
-n_lon <- length(test_lon_ii)
-`
-ints <- array(rep(0, n_lat * n_lon *56), c(n_lon, n_lat, 56))
-amps <- array(rep(NA, n_lat * n_lon *56), c(n_lon, n_lat, 56))
-
-for (y in 1:56){
-  for (i in 1:n_lon){
-    for (j in 1:n_lat){
-      if (!is.na(temp_test[i,j,1])){
-        mod <- lm(temp_test[i,j,(24*(y-1)+1):((24*(y-1))+12)] ~ sin_term +
-             cos_term+sin2_term+cos2_term)
-        ints[i,j, y] <- coef(mod)[1]
-        amps[i,j,y] <- .5*(max(mod$fitted.values)-min(mod$fitted.values))
-      } else ints[i,j,y ] <- amps[i,j,y] <- NA
-    }
-
-  }
-  print(y)
-}
-
-
-# if we tried to do this 112 times this would take forever
-# (and would be 720*360*112=29030400 lms to fit)
-# maybe we could average over small areas to reduce dimensionality?
-# or fit a model every second year
-`
-
-
-image.plot(mods[,,1], col = rev(brewer.pal(10,"RdBu")))
-
-
-intmod <- matrix(rep(0, n_lat*n_lon), n_lon, n_lat)
-ampmod <- matrix(rep(0, n_lat*n_lon), n_lon, n_lat)
-
-for (i in 1:n_lon){
-  for (j in 1:n_lat){
-    if (!is.na(temp_test[i,j,1])){
-      intmod[i,j] <- coef(lm(ints[i,j,]~ seq_along(ints[i,j,])))[2]
-      ampmod[i,j] <- coef(lm(amps[i,j,]~ seq_along(ints[i,j,])))[2]
-    } else intmod[i,j] <- ampmod[i,j] <- NA
-  }
-}
-
-
-image.plot(intmod*56, col = rev(brewer.pal(10,"RdBu")))
-
-image.plot(ampmod*56, col = rev(brewer.pal(10,"RdBu")))
+# ################################################
+# ## - model checking & model generalisations - ##
+# ################################################
+# 
+# par(mfrow=c(1,1))
+# monthly_mean <- sapply(monthly_temps, mean)
+# plot(monthly_mean, ylim=c(3,16))
+# mod_check <- lm(monthly_mean~sin_term+cos_term)
+# lines(mod_check$fitted.values)
+# 
+# plot(mod_check) # "U" shaped residual plot
+# 
+# 
+# # Try second (and third) order terms to remove errors
+# 
+# sin2_term <- sin((4*pi*1:12)/12); cos2_term <- cos((4*pi*1:12)/12)
+# sin3_term <- sin((6*pi*1:12)/12); cos3_term <- cos((6*pi*1:12)/12)
+#   
+# mod_2check <- lm(monthly_mean~sin_term+cos_term +sin2_term+cos2_term)
+# lines(mod_2check$fitted.values)
+# plot(mod_2check) # still not perfect, but gets rid of "U" errors
+# 
+# mod_3check <- lm(monthly_mean~sin_term+cos_term +sin2_term+cos2_term+
+#                  cos3_term+sin3_term)
+# 
+# # Model checking: compare AICs (recall: 2*p-2*log-lik )
+# AIC(mod_check) # 20.2
+# AIC(mod_2check) # -7.17
+# AIC(mod_3check) # -4.73
+# # suggesting that the model with the second order terms might be the
+# # best option for the split into 8/ yearly regressions
+# # Looking online, people comment that the temp peaks are too sharp to 
+# # be captured by the first order models, and so use second order
+# 
+# 
+# ######################################
+# ## - implement second order model - ##
+# ######################################
+# 
+# sin_term <- sin((2*pi*1:12)/12); cos_term <- cos((2*pi*1:12)/12)
+# sin2_term <- sin((4*pi*1:12)/12); cos2_term <- cos((4*pi*1:12)/12)
+# 
+# ## First for each of the 8 blocks 
+# harm_models2 = list()
+# for(i in 1:8){
+#   harm_models2[[i]] <- lm(split_data_matrix[,i] ~ sin_term + cos_term+
+#                             sin2_term+ cos2_term)
+# }
+# fitted_vals2 <- lapply(harm_models2, predict)
+# 
+# 
+# # plot to demonstrate the fit changing across time
+# plot(NULL,
+#      xlim = c(1,12),
+#      ylim = range(split_data_matrix),
+#      xaxt = "n",
+#      xlab = "Month",
+#      ylab = "Mean Temperature")
+# axis(1, at = 1:12, labels = month.abb)
+# # Manually put in values 1:8 corresponding to 14 year blocks
+# plot(1:12, split_data_matrix[,8], col = "orange")
+# lines(fitted_vals2[[1]], col = "orange")
+# lines(fitted_vals2[[8]], col = "green")
+# lines(fitted_vals[[8]], col="red") # comparison to first order
+# 
+# 
+# # amplitude and phase analysis changes a bit here
+# # NOT COMPLETE YET
+# amp = c()
+# phase = c()
+# for(i in 1:8){
+#   mod <- harm_models2[[i]]
+#   amp[i] <- sqrt((coef(mod)[2])^2 + (coef(mod)[3])^2)
+#   phase[i] <- atan2(coef(mod)[3], coef(mod)[2])
+# }
+# 
+# plot(amp)      # phase of 
+# plot(phase)
+# plot(sapply(harm_models2, function(x) coef(x)[1])) # intercept v time
+# 
+# 
+# ## now for each year individually
+# year_month_temp_mat <- matrix(0, nrow = 112, ncol = 12)
+# for(i in 1:12){
+#   year_month_temp_mat[,i] <- monthly_temps[[i]]
+# }
+# 
+# beta0 <- c()
+# amp <- c()
+# phase <- c()
+# 
+# for(i in 1:nrow(year_month_temp_mat)){
+#   mod <- lm(year_month_temp_mat[i,] ~ sin_term + cos_term+
+#               sin2_term+cos2_term)
+#   coefs <- coef(mod)
+#   
+#   beta0[i] <- coefs[1]
+#   amp[i] <- (max(mod$fitted.values)-min(mod$fitted.values))*.5
+#   phase[i] <- which(mod$fitted.values==max(mod$fitted.values))
+#   
+# }
+# 
+# # fit models for each 
+# intmod <- lm(beta0~years); 
+# ampmod <- lm(amp~years)
+# phasemod <- lm(phase~years)
+# 
+# plot(years,beta0); lines(years, intmod$fitted.values); summary(intmod)
+# plot(years, amp); lines(years, ampmod$fitted.values); summary(ampmod)
+# plot(years, phase); lines(years, phasemod$fitted.values); summary(phasemod)
+# 
+# 
+# 
+# 
+# ##################################################################
+# ######## ---- Investigating seasonal ARIMA models ---- ###########
+# ##################################################################
+# library(SWMPr)
+# 
+# # Steps done:
+# # 1) decompose time series into trend, seasonal and stationary parts
+# # 2) Then what?
+# 
+# 
+# ts_data <- ts(obs_ire_mean, start=c(1901,1), frequency=12) # making a class time series object
+# decomp <- decompose(ts_data, type = "additive")
+# plot(decomp)
+# plot(decomp$trend)      # get a similar overall shape to yearly mean over time
+# plot(decomp$seasonal[1:36]) # just a few cycles here
+# 
+# plot()
+# 
+# # looking at stationary part
+# acf(decomp$random, na.action=na.omit)
+# pacf(decomp$random, na.action=na.omit)
+# 
+# 
+# ## I'm not convinced by any of this yet
+# # I don't quite know what Q I'm trying to answer here.
+# # I'm not sure how this will let us get at a change in the seasonality
+# 
+# 
+# 
+# ########################################################
+# ########## ------ some other stuff ------- #############
+# ########################################################
+# 
+# # Try to fit a hierarchical model of lm for amplitude -> harmonic regression for seasons
+# # for each point in space. Then plot colour map of the amplitude
+# 
+# sin_term <- sin((2*pi*1:12)/12); cos_term <- cos((2*pi*1:12)/12)
+# sin2_term <- sin((4*pi*1:12)/12); cos2_term <- cos((4*pi*1:12)/12)
+# 
+# test_lon_ii <- which(lon > 10 & lon < 40)
+# test_lat_ii <- which(lat > 20 & lat <40 )
+# temp_test <- temp[test_lon_ii, test_lat_ii,]
+# 
+# n_lat <- length(test_lat_ii)
+# n_lon <- length(test_lon_ii)
+# `
+# ints <- array(rep(0, n_lat * n_lon *56), c(n_lon, n_lat, 56))
+# amps <- array(rep(NA, n_lat * n_lon *56), c(n_lon, n_lat, 56))
+# 
+# for (y in 1:56){
+#   for (i in 1:n_lon){
+#     for (j in 1:n_lat){
+#       if (!is.na(temp_test[i,j,1])){
+#         mod <- lm(temp_test[i,j,(24*(y-1)+1):((24*(y-1))+12)] ~ sin_term +
+#              cos_term+sin2_term+cos2_term)
+#         ints[i,j, y] <- coef(mod)[1]
+#         amps[i,j,y] <- .5*(max(mod$fitted.values)-min(mod$fitted.values))
+#       } else ints[i,j,y ] <- amps[i,j,y] <- NA
+#     }
+# 
+#   }
+#   print(y)
+# }
+# 
+# 
+# # if we tried to do this 112 times this would take forever
+# # (and would be 720*360*112=29030400 lms to fit)
+# # maybe we could average over small areas to reduce dimensionality?
+# # or fit a model every second year
+# `
+# 
+# 
+# image.plot(mods[,,1], col = rev(brewer.pal(10,"RdBu")))
+# 
+# 
+# intmod <- matrix(rep(0, n_lat*n_lon), n_lon, n_lat)
+# ampmod <- matrix(rep(0, n_lat*n_lon), n_lon, n_lat)
+# 
+# for (i in 1:n_lon){
+#   for (j in 1:n_lat){
+#     if (!is.na(temp_test[i,j,1])){
+#       intmod[i,j] <- coef(lm(ints[i,j,]~ seq_along(ints[i,j,])))[2]
+#       ampmod[i,j] <- coef(lm(amps[i,j,]~ seq_along(ints[i,j,])))[2]
+#     } else intmod[i,j] <- ampmod[i,j] <- NA
+#   }
+# }
+# 
+# 
+# image.plot(intmod*56, col = rev(brewer.pal(10,"RdBu")))
+# 
+# image.plot(ampmod*56, col = rev(brewer.pal(10,"RdBu")))
 
        
 ##################################################################
@@ -744,3 +744,210 @@ acf(anom, na.action=na.omit, main="ACF of anomalies")
 ## But does this mean that the simple model for months is unreliable?
 
 par(mfrow=c(1,1))
+
+##########################
+##issue:
+# Should the influence of the months with extreme temperatures on the average monthly temperatures in cold and warm seasons be taken into account?
+# Does autocorrelation shown by the ACF violate independence and invalidate p-values?
+
+#############################
+## 1. Are extreme hot and cold become more frequent over time?
+df_ext <- data.frame(
+  date  = date,
+  year  = year,
+  month = month,
+  anom  = anom
+)
+
+df_ext$season_wc <- ifelse(df_ext$month %in% warm_months, "warm",
+                           ifelse(df_ext$month %in% cold_months, "cold", NA))
+df_ext <- df_ext[!is.na(df_ext$season_wc), ]
+df_ext$season_wc <- factor(df_ext$season_wc, levels = c("cold","warm"))
+
+# Process data
+
+df_ext$t <- df_ext$year - mean(df_ext$year, na.rm = TRUE)
+
+thr_hot_warm  <- quantile(df_ext$anom[df_ext$season_wc=="warm"], 0.95, na.rm = TRUE) # Determine the threshold using 0.95
+thr_cold_cold <- quantile(df_ext$anom[df_ext$season_wc=="cold"], 0.05, na.rm = TRUE)
+
+df_ext$Ehot_warm <- NA_integer_
+df_ext$Ecold_cold <- NA_integer_
+
+df_ext$Ehot_warm[df_ext$season_wc=="warm"] <- as.integer(df_ext$anom[df_ext$season_wc=="warm"] > thr_hot_warm)
+df_ext$Ecold_cold[df_ext$season_wc=="cold"] <- as.integer(df_ext$anom[df_ext$season_wc=="cold"] < thr_cold_cold)
+
+df_warm <- df_ext[df_ext$season_wc=="warm", ]
+df_cold <- df_ext[df_ext$season_wc=="cold", ]
+
+#  Logistic regression - season + trend + s * t
+
+# warm
+g_hot_warm <- glm(Ehot_warm ~ t, data = df_warm, family = binomial())
+summary(g_hot_warm)
+## time coefficient t = 0.0189, p = 0.0017
+## the probability of "extreme heat anomalies" during the warm season has significantly increased over time.
+
+#cold
+g_cold_cold <- glm(Ecold_cold ~ t, data = df_cold, family = binomial())
+summary(g_cold_cold)
+## the time coefficient t is approximately 0.00021, and p = 0.97
+## there are no significant long-term changes.
+
+# check
+# group - 10 years
+# abs - the actual proportion of extreme hot in a group
+# fit - the probability of model fitting
+df_warm$decade <- floor(df_warm$year/10)*10
+df_cold$decade <- floor(df_cold$year/10)*10
+
+cal_warm <- aggregate(cbind(obs = Ehot_warm, fit = fitted(g_hot_warm)) ~ decade,
+                      data = df_warm, FUN = mean)
+cal_cold <- aggregate(cbind(obs = Ecold_cold, fit = fitted(g_cold_cold)) ~ decade,
+                      data = df_cold, FUN = mean)
+
+cal_warm
+cal_cold
+
+## obs clearly shows pulsation
+## the sample size is extremely small in itself. I think this situation is quite reasonable
+## so, not intuitive
+
+# plot
+## observed: number of ex-hot/ex-cold months in the corresponding six-month period of that year( n/6 )
+## smoothed obs: line by smoothing the observation points
+## fitted: the logistic regression model provides
+
+yr_warm <- aggregate(cbind(obs = Ehot_warm, fit = fitted(g_hot_warm)) ~ year,
+                     data = df_warm, FUN = mean)
+yr_cold <- aggregate(cbind(obs = Ecold_cold, fit = fitted(g_cold_cold)) ~ year,
+                     data = df_cold, FUN = mean)
+
+op <- par(no.readonly = TRUE)
+par(mfrow=c(2,1), mar=c(3,4,2,1))
+
+plot(yr_warm$year, yr_warm$obs, type="p",
+     xlab="Year", ylab="P(extreme hot | warm)",
+     main="Warm season: yearly observed vs fitted")
+lines(yr_warm$year, yr_warm$fit, lty=2)
+lines(smooth.spline(yr_warm$year, yr_warm$obs), lty=1)
+legend("topleft",
+       legend=c("Observed (yearly)", "Fitted (model)", "Smoothed obs"),
+       pch=c(1, NA, NA), lty=c(NA,2,1), bty="n", cex=0.9)
+
+plot(yr_cold$year, yr_cold$obs, type="p",
+     xlab="Year", ylab="P(extreme cold | cold)",
+     main="Cold season: yearly observed vs fitted")
+lines(yr_cold$year, yr_cold$fit, lty=2)
+lines(smooth.spline(yr_cold$year, yr_cold$obs), lty=1)
+legend("topleft",
+       legend=c("Observed (yearly)", "Fitted (model)", "Smoothed obs"),
+       pch=c(1, NA, NA), lty=c(NA,2,1), bty="n", cex=0.9)
+
+par(op)
+
+##The extreme hot has increased over time, while the extreme cold has not.
+
+###############################
+## 2. sensitivity test for the influence of extreme values
+## 3 models compare: median, trimmed mean(delete the top and bottom 10%), winsorized mean(<5% -- =5%, >95% -- =95%)
+
+# winsorize
+winsorize <- function(x, p = 0.05) {
+  q <- quantile(x, probs = c(p, 1 - p), na.rm = TRUE)
+  x[x < q[1]] <- q[1]
+  x[x > q[2]] <- q[2]
+  x
+}
+
+# model
+warm_med  <- cold_med  <- amp_med  <- rep(NA, length(years))
+warm_trim <- cold_trim <- amp_trim <- rep(NA, length(years))
+warm_win  <- cold_win  <- amp_win  <- rep(NA, length(years))
+
+for (i in seq_along(years)) {
+  y <- years[i]
+  ii_warm_y <- which(year == y & month %in% warm_months)
+  ii_cold_y <- which(year == y & month %in% cold_months)
+  
+  xw <- obs_ire_mean[ii_warm_y]
+  xc <- obs_ire_mean[ii_cold_y]
+  
+  # median
+  warm_med[i] <- median(xw, na.rm = TRUE)
+  cold_med[i] <- median(xc, na.rm = TRUE)
+  amp_med[i]  <- warm_med[i] - cold_med[i]
+  
+  # trimmed mean
+  warm_trim[i] <- mean(xw, trim = 0.10, na.rm = TRUE)
+  cold_trim[i] <- mean(xc, trim = 0.10, na.rm = TRUE)
+  amp_trim[i]  <- warm_trim[i] - cold_trim[i]
+  
+  # winsorized mean
+  warm_win[i] <- mean(winsorize(xw, p = 0.05), na.rm = TRUE)
+  cold_win[i] <- mean(winsorize(xc, p = 0.05), na.rm = TRUE)
+  amp_win[i]  <- warm_win[i] - cold_win[i]
+}
+
+# Trend comparisons
+summ_line <- function(mod) c(slope = coef(mod)[2], p = summary(mod)$coefficients[2,4])
+
+res_tab <- rbind(
+  warm_mean  = summ_line(lm(warm_mean ~ years)),
+  warm_med   = summ_line(lm(warm_med  ~ years)),
+  warm_trim  = summ_line(lm(warm_trim ~ years)),
+  warm_win   = summ_line(lm(warm_win  ~ years)),
+  
+  cold_mean  = summ_line(lm(cold_mean ~ years)),
+  cold_med   = summ_line(lm(cold_med  ~ years)),
+  cold_trim  = summ_line(lm(cold_trim ~ years)),
+  cold_win   = summ_line(lm(cold_win  ~ years)),
+  
+  amp_mean   = summ_line(lm(amp_mean  ~ years)),
+  amp_med    = summ_line(lm(amp_med   ~ years)),
+  amp_trim   = summ_line(lm(amp_trim  ~ years)),
+  amp_win    = summ_line(lm(amp_win   ~ years))
+)
+
+res_tab
+
+# plot
+op <- par(no.readonly = TRUE)
+par(mar=c(4,4,2,1))
+
+plot(years, amp_mean, type="l",
+     ylab="Warm - Cold (°C)", xlab="Year",
+     main="Ireland: amplitude trend sensitivity (mean vs robust)")
+lines(years, amp_med,  lty=2)
+lines(years, amp_trim, lty=3)
+lines(years, amp_win,  lty=4)
+
+legend("topleft",
+       legend=c("mean","median","trim(10%)","winsor(5%)"),
+       lty=c(1,2,3,4), bty="n", cex=0.9)
+
+par(op)
+
+## Hard to see clearly, make a smooth line graph
+op <- par(no.readonly = TRUE)
+par(mar=c(4,4,2,1))
+
+plot(years, amp_mean, type="n",
+     ylab="Warm - Cold (°C)", xlab="Year",
+     main="Ireland: amplitude trend sensitivity (smoothed)")
+
+lines(smooth.spline(years, amp_mean), lty=1)
+lines(smooth.spline(years, amp_med),  lty=2)
+lines(smooth.spline(years, amp_trim), lty=3)
+lines(smooth.spline(years, amp_win),  lty=4)
+
+legend("topleft",
+       legend=c("mean","median","trim(10%)","winsor(5%)"),
+       lty=c(1,2,3,4), bty="n", cex=0.9)
+
+par(op)
+
+## In addition to the median, the slopes and p-values of the mean, trim, and winsor are all close.
+## And the smooth lines of the three are almost touching each other.
+## The median does not provide a strong explanation for the target.
+## Perhaps we can consider that extreme values have little impact on the conclusion.
