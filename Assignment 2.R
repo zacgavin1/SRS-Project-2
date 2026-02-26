@@ -598,13 +598,13 @@ pacf(decomp$random, na.action=na.omit)
 sin_term <- sin((2*pi*1:12)/12); cos_term <- cos((2*pi*1:12)/12)
 sin2_term <- sin((4*pi*1:12)/12); cos2_term <- cos((4*pi*1:12)/12)
 
-test_lon_ii <- which(lon > 10 & lon < 40)
-test_lat_ii <- which(lat > 20 & lat <40 )
+test_lon_ii <- which(lon > -160 & lon < 150)
+test_lat_ii <- which(lat > -80 & lat <80 )
 temp_test <- temp[test_lon_ii, test_lat_ii,]
 
 n_lat <- length(test_lat_ii)
 n_lon <- length(test_lon_ii)
-`
+
 ints <- array(rep(0, n_lat * n_lon *56), c(n_lon, n_lat, 56))
 amps <- array(rep(NA, n_lat * n_lon *56), c(n_lon, n_lat, 56))
 
@@ -618,7 +618,7 @@ for (y in 1:56){
         amps[i,j,y] <- .5*(max(mod$fitted.values)-min(mod$fitted.values))
       } else ints[i,j,y ] <- amps[i,j,y] <- NA
     }
-    
+    print(i)
   }
   print(y)
 }
@@ -631,7 +631,7 @@ for (y in 1:56){
 `
 
 
-image.plot(mods[,,1], col = rev(brewer.pal(10,"RdBu")))
+# image.plot(mods[,,1], col = rev(brewer.pal(10,"RdBu")))
 
 
 intmod <- matrix(rep(0, n_lat*n_lon), n_lon, n_lat)
@@ -646,9 +646,10 @@ for (i in 1:n_lon){
   }
 }
 
+lim <- max(abs(intmod*56), na.rm = TRUE)
+image.plot(intmod*56, col = rev(brewer.pal(10,"RdBu")), zlim=c(-lim,lim))
 
-image.plot(intmod*56, col = rev(brewer.pal(10,"RdBu")))
-
-image.plot(ampmod*56, col = rev(brewer.pal(10,"RdBu")))
+lim <- max(abs(ampmod*56), na.rm = TRUE)
+image.plot(ampmod*56, col = rev(brewer.pal(10,"RdBu")), zlim=c(-lim,lim))
 
            
