@@ -11,8 +11,9 @@ library(data.table)
 #little change to check git push is working
 
 # setwd("C:\\Users\\Luke Egan\\OneDrive\\Desktop\\Statistical Research Skills\\Assignment 2")
-setwd("C:/Users/zgavi/Documents/Edinburgh Term 2/SRS")
+# setwd("C:/Users/zgavi/Documents/Edinburgh Term 2/SRS")
 # unzip("temp_data_SRS.nc.zip")
+setwd("temp_data_SRS.nc")
 nc <- nc_open("temp_data_SRS.nc")
 
 
@@ -61,15 +62,20 @@ date <- ymd(t_dstr) +ddays(time)
 # data in this form for a while
 
 #### NOTE::: This doesn't work at the moment
-rast_temp <- rast(
-  aperm(temp, c(2, 1, 3)),
-  extent=c(xmin = min(lon),
-           xmax = max(lon),
-           ymin = min(lat),
-           ymax = max(lat)),
-  crs = "EPSG:4326"
-)
+# rast_temp <- rast(
+#   aperm(temp, c(2, 1, 3)),
+#   extent=c(xmin = min(lon),
+#            xmax = max(lon),
+#            ymin = min(lat),
+#            ymax = max(lat)),
+#   crs = "EPSG:4326"
+# )
+# names(rast_temp) <- as.character(date)
+
+#####another method: Prevent excessive memory usage
+rast_temp <- terra::rast("temp_data_SRS.nc", subds="tmp")
 names(rast_temp) <- as.character(date)
+#####
 
 # making weird dataframe
 df <- terra::as.data.frame(rast_temp, xy = TRUE)
@@ -126,7 +132,7 @@ image.plot(temp[,,1344], col = rev(brewer.pal(10,"RdBu")), main ="Global Temp 01
 
 
 # Difference in temperature 111 years apart 
-dev.off()
+# dev.off()
 image.plot(temp[,,1344] - temp[,,1], col = rev(brewer.pal(10,"RdBu")), main ="Temp differences 111 years apart")
 
 
@@ -143,8 +149,8 @@ ii_cold <- sort(c(ii_autumn, ii_winter))
 
 # Consider one region for EDA - Ireland 
 # Longitide (-10, 40), Latitude (35, 72)
-ireland_lon_ii <- which(lon > 26 & lon < 31)
-ireland_lat_ii <- which(lat > 39 & lat <42 )
+ireland_lon_ii <- which(lon > -10 & lon < -5)
+ireland_lat_ii <- which(lat > 50 & lat < 55 )
 
 temp_ire <- temp[ireland_lon_ii, ireland_lat_ii,]
 
@@ -583,7 +589,7 @@ pacf(decomp$random, na.action=na.omit)
 
 
 ## I'm not convinced by any of this yet
-# I don't quite know what Q I'm trying to answer here. 
+# I don't quite know what Q I'm trying to answer here.
 # I'm not sure how this will let us get at a change in the seasonality
 
 
@@ -612,19 +618,19 @@ for (y in 1:56){
   for (i in 1:n_lon){
     for (j in 1:n_lat){
       if (!is.na(temp_test[i,j,1])){
-        mod <- lm(temp_test[i,j,(24*(y-1)+1):((24*(y-1))+12)] ~ sin_term + 
+        mod <- lm(temp_test[i,j,(24*(y-1)+1):((24*(y-1))+12)] ~ sin_term +
              cos_term+sin2_term+cos2_term)
         ints[i,j, y] <- coef(mod)[1]
         amps[i,j,y] <- .5*(max(mod$fitted.values)-min(mod$fitted.values))
       } else ints[i,j,y ] <- amps[i,j,y] <- NA
     }
-    
+
   }
   print(y)
 }
 
 
-# if we tried to do this 112 times this would take forever 
+# if we tried to do this 112 times this would take forever
 # (and would be 720*360*112=29030400 lms to fit)
 # maybe we could average over small areas to reduce dimensionality?
 # or fit a model every second year
@@ -651,4 +657,90 @@ image.plot(intmod*56, col = rev(brewer.pal(10,"RdBu")))
 
 image.plot(ampmod*56, col = rev(brewer.pal(10,"RdBu")))
 
-           
+       
+##################################################################
+
+# warm/cold seasons
+obs_ire_mean <- apply(temp_ire, 3, mean, na.rm = TRUE)
+
+year  <- as.integer(format(date, "%Y"))
+month <- as.integer(format(date, "%m"))
+years <- sort(unique(year))
+
+warm_months <- 3:8
+cold_months <- c(9:12, 1:2)
+
+# 1 number per year
+warm_mean <- cold_mean <- amp_mean <- rep(NA, length(years))
+
+for (i in seq_along(years)) {
+  y <- years[i]
+  ii_warm_y <- which(year == y & month %in% warm_months)
+  ii_cold_y <- which(year == y & month %in% cold_months)
+  
+  warm_mean[i] <- mean(obs_ire_mean[ii_warm_y], na.rm = TRUE)
+  cold_mean[i] <- mean(obs_ire_mean[ii_cold_y], na.rm = TRUE)
+  amp_mean[i]  <- warm_mean[i] - cold_mean[i]
+}
+
+# Warm vs Cold plot
+op <- par(no.readonly = TRUE)
+layout(matrix(c(1,2), nrow=2), heights=c(4,1))
+par(mar=c(3,4,2,1))
+
+ylim_all <- range(c(warm_mean, cold_mean), na.rm=TRUE)
+plot(years, warm_mean, type="l", ylim=ylim_all,
+     ylab="Mean Temp (°C)", xlab="",
+     main="Ireland: Warm (Mar–Aug) vs Cold (Sep–Feb) seasonal means")
+lines(years, cold_mean, lty=2)
+
+par(mar=c(0,0,0,0))
+plot.new()
+legend("center",
+       legend=c("Warm (Mar–Aug)", "Cold (Sep–Feb)"),
+       lty=c(1,2), bty="n", horiz=TRUE, cex=0.9)
+
+layout(1)
+par(op)
+
+# (warm - cold) and linear trend
+par(mar=c(3,4,2,1))
+plot(years, amp_mean, type="l",
+     ylab="Warm - Cold (°C)", xlab="Year",
+     main="Ireland: Seasonal contrast (mean-based)")
+abline(lm(amp_mean ~ years), lty=2)
+
+# Trend summaries
+summary(lm(warm_mean ~ years))
+##Slope: 0.006595 °C per year, p-value: 5.76e-06
+##Perhaps could think that the warm season in Ireland is experiencing significant warming.
+
+summary(lm(cold_mean ~ years))
+##Slope: 0.005395 °C per year, p-value: 0.000797, warms up more slowly
+
+summary(lm(amp_mean  ~ years))
+##Slope: 0.001200 °C per year, p-value: 0.505 (not significant)
+##Both seasons are getting warmer, but the temperature difference doesn't change significantly.
+
+#############################################
+## Remove average seasonal cycle -> anomalies
+clim_by_month <- tapply(obs_ire_mean, month, mean, na.rm = TRUE)
+anom <- obs_ire_mean - clim_by_month[as.character(month)]
+
+# the time series, distribution, QQ and ACF 
+par(mfrow=c(4,1), mar=c(3,4,2,1))
+plot(date, anom, type="l", xlab="", ylab="Temp anomaly (°C)",
+     main="Ireland: monthly anomalies (seasonality removed)")
+abline(lm(anom ~ as.numeric(date)), lty=2)
+
+hist(anom, breaks=40, main="Anomaly distribution", xlab="°C")
+qqnorm(anom); qqline(anom)
+## the distribution is not completely normal, with heavier tails.
+## it indicates that there is a high possibility of extreme temperatures.
+
+acf(anom, na.action=na.omit, main="ACF of anomalies")
+## There is autocorrelation
+## I think, it is reasonable because the warm/cold anomalies will persist for a certain period of time.
+## But does this mean that the simple model for months is unreliable?
+
+par(mfrow=c(1,1))
