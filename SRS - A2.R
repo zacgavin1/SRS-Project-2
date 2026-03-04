@@ -116,12 +116,6 @@ n_lat <- length(lat_ii)
 n_time <- dim(temp_test)[3]
 
 
-# Now define regions for report. We want to look at a vareity of climates for 
-# analysis
-
-# Siberia - Continental: Defined by 
-
-
 
 # Now take mean over 3x3 grids in this region. Lower spatial dimension
 
@@ -184,10 +178,8 @@ n_lat_block <- dim(temp_test)[2]
 # Compare Harmonic Regression Models using relative measures of performance 
 # (AIC and BIC)
 
-
-
-
-
+AIC_order1 <- AIC_order2 <- AIC_order3<- BIC_order1<-BIC_order2<-BIC_order3 <- matrix(0,n_lon_block, n_lat_block)
+best_order_AIC <- best_order_BIC <- matrix(0,n_lon_block, n_lat_block)
 for (i in 1:n_lon_block) {
   for (j in 1:n_lat_block) {
     
@@ -245,7 +237,7 @@ c(length(which(best_order_BIC == 1)), length(which(best_order_BIC == 2)),
 
 
 # Look at the 2nd order model in more detail. In particular, we want to look at the
-# time and harmonic interaction terms and see if theyre significant. Significance
+# time and harmonic interaction terms and see if they're significant. Significance
 # may indicate potential seasonal changes
 
 
@@ -496,7 +488,3 @@ sum(resids2[[220]]^2)
 ################################################################################
 ######################## Extreme Temperature/Anomalies  ########################
 ################################################################################
-
-
-
-
