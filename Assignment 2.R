@@ -10,8 +10,8 @@ library(data.table)
 # Add an extra line for your personal file path and comment out as appropriate
 #little change to check git push is working
 
-# setwd("C:\\Users\\Luke Egan\\OneDrive\\Desktop\\Statistical Research Skills\\Assignment 2")
-setwd("C:/Users/zgavi/Documents/Edinburgh Term 2/SRS")
+setwd("C:\\Users\\Luke Egan\\OneDrive\\Desktop\\Statistical Research Skills\\Assignment 2")
+# setwd("C:/Users/zgavi/Documents/Edinburgh Term 2/SRS")
 # unzip("temp_data_SRS.nc.zip")
 nc <- nc_open("temp_data_SRS.nc")
 
@@ -121,7 +121,7 @@ range(df_temp$lat)
 # Compare heatmaps same day 111 years apart
 par(mfrow = c(2,1), mar = c(3,3,2,5))
 image.plot(temp[,,1], col = rev(brewer.pal(10,"RdBu")), main = "Global Temp 01/1901")
-image.plot(temp[,,1344], col = rev(brewer.pal(10,"RdBu")), main ="Global Temp 01/2012")
+image.plot(tmp[,,1344], col = rev(brewer.pal(10,"RdBu")), main ="Global Temp 01/2012")
 
 
 
@@ -657,4 +657,585 @@ image.plot(intmod*56, col = rev(brewer.pal(10,"RdBu")), zlim=c(-lim,lim))
 lim <- max(abs(ampmod*56), na.rm = TRUE)
 image.plot(ampmod*56, col = rev(brewer.pal(10,"RdBu")), zlim=c(-lim,lim))
 
-           
+      
+
+
+################################################################################
+############## Comparing Raw Data to Model Approaches ##########################
+################################################################################
+sin1 <- sin((2*pi*1:12)/12); cos1 <- cos((2*pi*1:12)/12)
+sin2 <- sin((4*pi*1:12)/12); cos2 <- cos((4*pi*1:12)/12)
+
+n_lon <- length(lon)
+n_lat <- length(lat)
+n_years <- length(years)
+year_month_index <- split(1:length(year), month)
+raw_amp_array  <- array(NA, dim=c(n_lon, n_lat, n_years))
+raw_peak_array <- array(NA, dim=c(n_lon, n_lat, n_years))
+model_amp_array  <- array(NA, dim=c(n_lon, n_lat, n_years))
+model_peak_array <- array(NA, dim=c(n_lon, n_lat, n_years))
+
+
+for(i in 1:n_lon){
+  for(j in 1:n_lat){
+    
+    cell_ts <- temp[i,j,]
+    if(all(is.na(cell_ts))) next
+    
+    # Build 112 x 12 matrix
+    year_mat <- matrix(NA, nrow=n_years, ncol=12)
+    for(m in 1:12){
+      year_mat[,m] <- cell_ts[ year_month_index[[m]] ]
+    }
+    
+    for(y in 1:n_years){
+      yvals <- year_mat[y,]
+      raw_amp_array[i,j,y]  <- (max(yvals) - min(yvals))/2
+      raw_peak_array[i,j,y] <- which.max(yvals)
+      
+      mod <- lm(yvals ~ sin1 + cos1 + sin2 + cos2)
+      fitted_vals <- fitted(mod)
+      
+      model_amp_array[i,j,y]  <- (max(fitted_vals)-min(fitted_vals))/2
+      model_peak_array[i,j,y] <- which.max(fitted_vals)
+    }
+  }
+}
+
+peak_diff_array <- model_peak_array - raw_peak_array
+mean_peak_diff <- apply(peak_diff_array, c(1,2), mean, na.rm=TRUE)
+
+image.plot(lon, lat, mean_peak_diff,
+           main="Model - Raw Peak Month Difference")
+################################################################################
+#### Branch YZ #################################################################
+################################################################################
+
+
+library(ncdf4)
+library(lubridate)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+lon  <- ncvar_get(nc, "lon")
+lat  <- ncvar_get(nc, "lat")
+time <- ncvar_get(nc, "time")
+tmp  <- ncvar_get(nc, "tmp")
+
+## Data preprocessing
+# Dealing with Missing values: Since the missing values have been assigned extreme values, 
+# it is planned to replace the missing values with NA.
+fv <- ncatt_get(nc, "tmp", "_FillValue")$value
+if (is.null(fv) || is.na(fv)) fv <- ncatt_get(nc, "tmp", "missing_value")$value
+tmp[tmp >= (fv * 0.9)] <- NA
+
+# Standardized time
+origin <- as.Date("1900-01-01")
+data <- origin + time
+# Extract the date and month
+years  <- year(data)
+months <- month(data)
+
+# Convert to standard longitude and latitude
+if (max(lon, na.rm = TRUE) > 180) {
+  lon_new <- ifelse(lon > 180, lon - 360, lon)
+  ord <- order(lon_new)
+  lon <- lon_new[ord]
+  tmp <- tmp[ord, , ]
+}
+
+## Limit the area to Ireland
+lon_min <- -10.3; lon_max <- -5.3
+lat_min <-  50.3; lat_max <- 55.3
+
+lon_idx <- which(lon >= lon_min & lon <= lon_max)
+lat_idx <- which(lat >= lat_min & lat <= lat_max)
+
+tmp_ie <- tmp[lon_idx, lat_idx, , drop = FALSE]
+
+# Calculate the average temperature of the Irish region
+ie_month_temperature <- sapply(seq_along(time), function(ti) {
+  mean(tmp_ie[, , ti], na.rm = TRUE)
+})
+
+# Monthly time series data frame
+ie_table <- tibble(
+  date  = data,
+  year  = years,
+  month = months,
+  ie_mean_month_temp = ie_month_temperature
+)
+ie_month_temperature
+# head(ie_table)
+# summary(ie_table$ie_mean_month_temp)
+
+## Calculate the temperature difference between the coldest and hottest months each year (There is no obvious finds)
+dif_year <- summarise(
+  group_by(ie_table, year),
+  amp = max(ie_mean_month_temp, na.rm = TRUE) - min(ie_mean_month_temp, na.rm = TRUE),
+  .groups = "drop"
+)
+
+plot(dif_year$year, dif_year$amp, type = "l",
+     xlab = "Year", 
+     ylab = "Temperature Difference (max month - min month, °C)",
+     main = "Ireland Temperature Difference over time"
+)
+points(dif_year$year, dif_year$amp, pch = 16, cex = 0.4)
+
+abline(lm(amp ~ year, data = dif_year), lwd = 2)
+
+## Whether the warmest or coldest month is changing (There is no obvious finds)
+wc_month <- summarise(
+  group_by(ie_table, year),
+  warm_month = month[which.max(ie_mean_month_temp)],
+  cold_month = month[which.min(ie_mean_month_temp)],
+  .groups = "drop"
+)
+
+# table(wc_month$warm_month)
+# table(wc_month$cold_month)
+
+plot_warm <- ggplot(wc_month, aes(x = year, y = warm_month)) +
+  geom_point(alpha = 0.5, position = position_jitter(height = 0.1, width = 0)) +
+  scale_y_continuous(breaks = 1:12) +
+  labs(x = "Year", y = "Warmest month")
+
+plot_cold <- ggplot(wc_month, aes(x = year, y = cold_month)) +
+  geom_point(alpha = 0.6, position = position_jitter(height = 0.1, width = 0)) +
+  scale_y_continuous(breaks = 1:12) +
+  labs(x = "Year", y = "Coldest Month")
+
+plot_warm
+plot_cold
+
+## Determine the impact of climate warming on the seasons 
+## (Whether the warming occurs uniformly throughout the year or is mainly concentrated in certain seasons)
+## There is some finds
+ie_season <- mutate(
+  ie_table,
+  season = case_when(
+    month %in% c(12, 1, 2) ~ "Winter",
+    month %in% c(3, 4, 5)  ~ "Spring",
+    month %in% c(6, 7, 8)  ~ "Summer",
+    TRUE                   ~ "Autumn"
+  )
+)
+
+season_trend <- summarise(
+  group_by(ie_season, season, year),
+  temp = mean(ie_mean_month_temp, na.rm = TRUE),
+  .groups = "drop"
+)
+
+# Perform a regression comparison of the slope for each season with respect to year
+by(season_trend, season_trend$season, \(d) summary(lm(temp ~ year, data = d)))
+
+ggplot(season_trend, aes(x = year, y = temp)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", se = TRUE) +
+  facet_wrap(~ season, ncol = 2, scales = "free_y") +
+  labs(x = "Year", y = "Seasonal Mean Temperature (°C)")
+
+## Calculate the annual average temperatures of other countries at different longitudes
+## Define a general function. Given the bbox, output the annual average temperature.
+annual <- function(lon, lat, tmp, data, years, lon_min, lon_max, lat_min, lat_max, name = "Region") {
+  lon_idx <- which(lon >= lon_min & lon <= lon_max)
+  lat_idx <- which(lat >= lat_min & lat <= lat_max)
+  
+  if (length(lon_idx) == 0 || length(lat_idx) == 0) {
+    stop(sprintf("There are no grid points within the bbox. Check the lon or lat range.", name))
+  }
+  
+  tmp_sub <- tmp[lon_idx, lat_idx, , drop = FALSE]
+  
+  # Monthly time series data frame
+  ie_table <- tibble(
+    date  = data,
+    year  = years,
+    month = months,
+    ie_mean_month_temp = ie_month_temperature
+  )
+  
+  # Regional monthly average temperature
+  month_temperature <- sapply(seq_len(dim(tmp_sub)[3]), function(ti) {
+    mean(tmp_sub[, , ti], na.rm = TRUE)
+  })
+  
+  re_month <- tibble(
+    date = data,
+    year = years,
+    temp = month_temperature
+  )
+  
+  # Annual average temperature
+  re_annual <- mutate(
+    summarise(
+      group_by(re_month, year),
+      temp_annual = mean(temp, na.rm = TRUE),
+      .groups = "drop"
+    ),
+    region = name
+  )
+  
+  return(re_annual)
+}
+
+# Ireland
+
+ie_annual <- annual(
+  lon = lon, lat = lat, tmp = tmp,
+  data = data, years = years,
+  lon_min = lon_min, lon_max = lon_max,
+  lat_min = lat_min, lat_max = lat_max,
+  name = "Ireland"
+)
+
+# Only change the longitude range
+# Netherlands（The latitude range remains at 50.3 – 55.3）
+nl_lon_min <- 3.0;  nl_lon_max <- 7.5
+nl_lat_min <- lat_min; nl_lat_max <- lat_max
+
+nl_annual <- annual(
+  lon = lon, lat = lat, tmp = tmp,
+  data = data, years = years,
+  lon_min = nl_lon_min, lon_max = nl_lon_max,
+  lat_min = nl_lat_min, lat_max = nl_lat_max,
+  name = "Netherlands (same-lat band)"
+)
+
+# Belarus
+by_lon_min <- 23.0; by_lon_max <- 32.0
+by_lat_min <- lat_min; by_lat_max <- lat_max
+
+by_annual <- annual(
+  lon = lon, lat = lat, tmp = tmp,
+  data = data, years = years,
+  lon_min = by_lon_min, lon_max = by_lon_max,
+  lat_min = by_lat_min, lat_max = by_lat_max,
+  name = "Belarus (same-lat band)"
+)
+
+# Draw a comparison chart
+annuals <- bind_rows(ie_annual, nl_annual, by_annual)
+
+# print(head(annuals))
+# print(tail(annuals))
+
+ggplot(annuals, aes(x = year, y = temp_annual, group = region, linetype = region)) +
+  geom_line(linewidth = 0.8) +
+  labs(x = "Year",
+       y = "Annual mean temperature (°C)",
+       title = "Annual mean temperature: Ireland vs same-latitude bands in Netherlands & Belarus",
+       linetype = "Region"
+  )
+
+
+
+################################################################################
+#### Branch scx ################################################################
+################################################################################
+
+
+# warm/cold seasons
+obs_ire_mean <- apply(temp_ire, 3, mean, na.rm = TRUE)
+
+year  <- as.integer(format(date, "%Y"))
+month <- as.integer(format(date, "%m"))
+years <- sort(unique(year))
+
+warm_months <- 3:8
+cold_months <- c(9:12, 1:2)
+
+# 1 number per year
+warm_mean <- cold_mean <- amp_mean <- rep(NA, length(years))
+
+for (i in seq_along(years)) {
+  y <- years[i]
+  ii_warm_y <- which(year == y & month %in% warm_months)
+  ii_cold_y <- which(year == y & month %in% cold_months)
+  
+  warm_mean[i] <- mean(obs_ire_mean[ii_warm_y], na.rm = TRUE)
+  cold_mean[i] <- mean(obs_ire_mean[ii_cold_y], na.rm = TRUE)
+  amp_mean[i]  <- warm_mean[i] - cold_mean[i]
+}
+
+# Warm vs Cold plot
+op <- par(no.readonly = TRUE)
+layout(matrix(c(1,2), nrow=2), heights=c(4,1))
+par(mar=c(3,4,2,1))
+
+ylim_all <- range(c(warm_mean, cold_mean), na.rm=TRUE)
+plot(years, warm_mean, type="l", ylim=ylim_all,
+     ylab="Mean Temp (°C)", xlab="",
+     main="Ireland: Warm (Mar–Aug) vs Cold (Sep–Feb) seasonal means")
+lines(years, cold_mean, lty=2)
+
+par(mar=c(0,0,0,0))
+plot.new()
+legend("center",
+       legend=c("Warm (Mar–Aug)", "Cold (Sep–Feb)"),
+       lty=c(1,2), bty="n", horiz=TRUE, cex=0.9)
+
+layout(1)
+par(op)
+
+# (warm - cold) and linear trend
+par(mar=c(3,4,2,1))
+plot(years, amp_mean, type="l",
+     ylab="Warm - Cold (°C)", xlab="Year",
+     main="Ireland: Seasonal contrast (mean-based)")
+abline(lm(amp_mean ~ years), lty=2)
+
+
+
+# Trend summaries
+summary(lm(warm_mean ~ years))
+##Slope: 0.006595 °C per year, p-value: 5.76e-06
+##Perhaps could think that the warm season in Ireland is experiencing significant warming.
+
+summary(lm(cold_mean ~ years))
+##Slope: 0.005395 °C per year, p-value: 0.000797, warms up more slowly
+
+summary(lm(amp_mean  ~ years))
+##Slope: 0.001200 °C per year, p-value: 0.505 (not significant)
+##Both seasons are getting warmer, but the temperature difference doesn't change significantly.
+
+
+
+
+
+
+#############################################
+## Remove average seasonal cycle -> anomalies
+clim_by_month <- tapply(obs_ire_mean, month, mean, na.rm = TRUE)
+anom <- obs_ire_mean - clim_by_month[as.character(month)]
+
+# the time series, distribution, QQ and ACF 
+par(mfrow=c(4,1), mar=c(3,4,2,1))
+plot(date, anom, type="l", xlab="", ylab="Temp anomaly (°C)",
+     main="Ireland: monthly anomalies (seasonality removed)")
+abline(lm(anom ~ as.numeric(date)), lty=2)
+
+hist(anom, breaks=40, main="Anomaly distribution", xlab="°C")
+qqnorm(anom); qqline(anom)
+## the distribution is not completely normal, with heavier tails.
+## it indicates that there is a high possibility of extreme temperatures.
+
+acf(anom, na.action=na.omit, main="ACF of anomalies")
+## There is autocorrelation
+## I think, it is reasonable because the warm/cold anomalies will persist for a certain period of time.
+## But does this mean that the simple model for months is unreliable?
+
+par(mfrow=c(1,1))
+
+##########################
+##issue:
+# Should the influence of the months with extreme temperatures on the average monthly temperatures in cold and warm seasons be taken into account?
+# Does autocorrelation shown by the ACF violate independence and invalidate p-values?
+
+
+
+
+#############################
+## 1. Are extreme hot and cold become more frequent over time?
+df_ext <- data.frame(
+  date  = date,
+  year  = year,
+  month = month,
+  anom  = anom
+)
+
+df_ext$season_wc <- ifelse(df_ext$month %in% warm_months, "warm",
+                           ifelse(df_ext$month %in% cold_months, "cold", NA))
+df_ext <- df_ext[!is.na(df_ext$season_wc), ]
+df_ext$season_wc <- factor(df_ext$season_wc, levels = c("cold","warm"))
+
+# Process data
+
+df_ext$t <- df_ext$year - mean(df_ext$year, na.rm = TRUE)
+
+thr_hot_warm  <- quantile(df_ext$anom[df_ext$season_wc=="warm"], 0.95, na.rm = TRUE) # Determine the threshold using 0.95
+thr_cold_cold <- quantile(df_ext$anom[df_ext$season_wc=="cold"], 0.05, na.rm = TRUE)
+
+df_ext$Ehot_warm <- NA_integer_
+df_ext$Ecold_cold <- NA_integer_
+
+df_ext$Ehot_warm[df_ext$season_wc=="warm"] <- as.integer(df_ext$anom[df_ext$season_wc=="warm"] > thr_hot_warm)
+df_ext$Ecold_cold[df_ext$season_wc=="cold"] <- as.integer(df_ext$anom[df_ext$season_wc=="cold"] < thr_cold_cold)
+
+df_warm <- df_ext[df_ext$season_wc=="warm", ]
+df_cold <- df_ext[df_ext$season_wc=="cold", ]
+
+#  Logistic regression - season + trend + s * t
+
+# warm
+g_hot_warm <- glm(Ehot_warm ~ t, data = df_warm, family = binomial())
+summary(g_hot_warm)
+## time coefficient t = 0.0189, p = 0.0017
+## the probability of "extreme heat anomalies" during the warm season has significantly increased over time.
+
+#cold
+g_cold_cold <- glm(Ecold_cold ~ t, data = df_cold, family = binomial())
+summary(g_cold_cold)
+## the time coefficient t is approximately 0.00021, and p = 0.97
+## there are no significant long-term changes.
+
+# check
+# group - 10 years
+# abs - the actual proportion of extreme hot in a group
+# fit - the probability of model fitting
+df_warm$decade <- floor(df_warm$year/10)*10
+df_cold$decade <- floor(df_cold$year/10)*10
+
+cal_warm <- aggregate(cbind(obs = Ehot_warm, fit = fitted(g_hot_warm)) ~ decade,
+                      data = df_warm, FUN = mean)
+cal_cold <- aggregate(cbind(obs = Ecold_cold, fit = fitted(g_cold_cold)) ~ decade,
+                      data = df_cold, FUN = mean)
+
+cal_warm
+cal_cold
+
+## obs clearly shows pulsation
+## the sample size is extremely small in itself. I think this situation is quite reasonable
+## so, not intuitive
+
+# plot
+## observed: number of ex-hot/ex-cold months in the corresponding six-month period of that year( n/6 )
+## smoothed obs: line by smoothing the observation points
+## fitted: the logistic regression model provides
+
+yr_warm <- aggregate(cbind(obs = Ehot_warm, fit = fitted(g_hot_warm)) ~ year,
+                     data = df_warm, FUN = mean)
+yr_cold <- aggregate(cbind(obs = Ecold_cold, fit = fitted(g_cold_cold)) ~ year,
+                     data = df_cold, FUN = mean)
+
+op <- par(no.readonly = TRUE)
+par(mfrow=c(2,1), mar=c(3,4,2,1))
+
+plot(yr_warm$year, yr_warm$obs, type="p",
+     xlab="Year", ylab="P(extreme hot | warm)",
+     main="Warm season: yearly observed vs fitted")
+lines(yr_warm$year, yr_warm$fit, lty=2)
+lines(smooth.spline(yr_warm$year, yr_warm$obs), lty=1)
+legend("topleft",
+       legend=c("Observed (yearly)", "Fitted (model)", "Smoothed obs"),
+       pch=c(1, NA, NA), lty=c(NA,2,1), bty="n", cex=0.9)
+
+plot(yr_cold$year, yr_cold$obs, type="p",
+     xlab="Year", ylab="P(extreme cold | cold)",
+     main="Cold season: yearly observed vs fitted")
+lines(yr_cold$year, yr_cold$fit, lty=2)
+lines(smooth.spline(yr_cold$year, yr_cold$obs), lty=1)
+legend("topleft",
+       legend=c("Observed (yearly)", "Fitted (model)", "Smoothed obs"),
+       pch=c(1, NA, NA), lty=c(NA,2,1), bty="n", cex=0.9)
+
+par(op)
+
+##The extreme hot has increased over time, while the extreme cold has not.
+
+###############################
+## 2. sensitivity test for the influence of extreme values
+## 3 models compare: median, trimmed mean(delete the top and bottom 10%), winsorized mean(<5% -- =5%, >95% -- =95%)
+
+# winsorize
+winsorize <- function(x, p = 0.05) {
+  q <- quantile(x, probs = c(p, 1 - p), na.rm = TRUE)
+  x[x < q[1]] <- q[1]
+  x[x > q[2]] <- q[2]
+  x
+}
+
+# model
+warm_med  <- cold_med  <- amp_med  <- rep(NA, length(years))
+warm_trim <- cold_trim <- amp_trim <- rep(NA, length(years))
+warm_win  <- cold_win  <- amp_win  <- rep(NA, length(years))
+
+for (i in seq_along(years)) {
+  y <- years[i]
+  ii_warm_y <- which(year == y & month %in% warm_months)
+  ii_cold_y <- which(year == y & month %in% cold_months)
+  
+  xw <- obs_ire_mean[ii_warm_y]
+  xc <- obs_ire_mean[ii_cold_y]
+  
+  # median
+  warm_med[i] <- median(xw, na.rm = TRUE)
+  cold_med[i] <- median(xc, na.rm = TRUE)
+  amp_med[i]  <- warm_med[i] - cold_med[i]
+  
+  # trimmed mean
+  warm_trim[i] <- mean(xw, trim = 0.10, na.rm = TRUE)
+  cold_trim[i] <- mean(xc, trim = 0.10, na.rm = TRUE)
+  amp_trim[i]  <- warm_trim[i] - cold_trim[i]
+  
+  # winsorized mean
+  warm_win[i] <- mean(winsorize(xw, p = 0.05), na.rm = TRUE)
+  cold_win[i] <- mean(winsorize(xc, p = 0.05), na.rm = TRUE)
+  amp_win[i]  <- warm_win[i] - cold_win[i]
+}
+
+# Trend comparisons
+summ_line <- function(mod) c(slope = coef(mod)[2], p = summary(mod)$coefficients[2,4])
+
+res_tab <- rbind(
+  warm_mean  = summ_line(lm(warm_mean ~ years)),
+  warm_med   = summ_line(lm(warm_med  ~ years)),
+  warm_trim  = summ_line(lm(warm_trim ~ years)),
+  warm_win   = summ_line(lm(warm_win  ~ years)),
+  
+  cold_mean  = summ_line(lm(cold_mean ~ years)),
+  cold_med   = summ_line(lm(cold_med  ~ years)),
+  cold_trim  = summ_line(lm(cold_trim ~ years)),
+  cold_win   = summ_line(lm(cold_win  ~ years)),
+  
+  amp_mean   = summ_line(lm(amp_mean  ~ years)),
+  amp_med    = summ_line(lm(amp_med   ~ years)),
+  amp_trim   = summ_line(lm(amp_trim  ~ years)),
+  amp_win    = summ_line(lm(amp_win   ~ years))
+)
+
+res_tab
+
+# plot
+op <- par(no.readonly = TRUE)
+par(mar=c(4,4,2,1))
+
+plot(years, amp_mean, type="l",
+     ylab="Warm - Cold (°C)", xlab="Year",
+     main="Ireland: amplitude trend sensitivity (mean vs robust)")
+lines(years, amp_med,  lty=2)
+lines(years, amp_trim, lty=3)
+lines(years, amp_win,  lty=4)
+
+legend("topleft",
+       legend=c("mean","median","trim(10%)","winsor(5%)"),
+       lty=c(1,2,3,4), bty="n", cex=0.9)
+
+par(op)
+
+## Hard to see clearly, make a smooth line graph
+op <- par(no.readonly = TRUE)
+par(mar=c(4,4,2,1))
+
+plot(years, amp_mean, type="n",
+     ylab="Warm - Cold (°C)", xlab="Year",
+     main="Ireland: amplitude trend sensitivity (smoothed)")
+
+lines(smooth.spline(years, amp_mean), lty=1)
+lines(smooth.spline(years, amp_med),  lty=2)
+lines(smooth.spline(years, amp_trim), lty=3)
+lines(smooth.spline(years, amp_win),  lty=4)
+
+legend("topleft",
+       legend=c("mean","median","trim(10%)","winsor(5%)"),
+       lty=c(1,2,3,4), bty="n", cex=0.9)
+
+par(op)
+
+## In addition to the median, the slopes and p-values of the mean, trim, and winsor are all close.
+## And the smooth lines of the three are almost touching each other.
+## The median does not provide a strong explanation for the target.
+## Perhaps we can consider that extreme values have little impact on the conclusion.
