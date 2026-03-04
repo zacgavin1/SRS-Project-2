@@ -117,6 +117,50 @@ n_time <- dim(temp_test)[3]
 
 
 
+# For the report we would like to compare different regions. In particular, we 
+# compare different climates
+
+# Siberia - Continental: Defined by high seasonal variation. Very warm summers 
+#                        and very cold 
+
+lon_ii_S <- which(lon > 90 & lon < 110)
+lat_ii_S <- which(lat > 55 & lat < 65)
+temp_Siberia <- tmp[lon_ii_S, lat_ii_S,]
+
+
+n_lon_S <- length(lon_ii_S)
+n_lat_S <- length(lat_ii_S)
+
+# Ireland - Temperate: Defined by moderate temperatures and moderate seasonal 
+#                      variation
+
+lon_ii_I <- which(lon > -10 & lon < -5)
+lat_ii_I <- which(lat > 51 & lat < 56)
+temp_Ireland <- tmp[lon_ii_S, lat_ii_S,]
+
+
+n_lon_I <- length(lon_ii_I)
+n_lat_I <- length(lat_ii_I)
+
+# Amazon - Tropical: Defined by consistently high temperatures with weak seasonal
+#                    temperature variation
+
+
+lon_ii_A <- which(lon > -70 & lon < -50)
+lat_ii_A <- which(lat > -10 & lat < 5)
+temp_Amazon <- tmp[lon_ii_A, lat_ii_A, ]
+
+n_lon_A <- length(lon_ii_A)
+n_lat_A <- length(lat_ii_A)
+
+
+
+
+
+
+
+
+
 # Now take mean over 3x3 grids in this region. Lower spatial dimension
 
 # n_lon_block <- floor(n_lon / 3)
