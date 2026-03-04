@@ -592,14 +592,16 @@ pacf(decomp$random, na.action=na.omit)
 ########## ------ some other stuff ------- #############
 ########################################################
 
+library(tuneR)
+
 # Try to fit a hierarchical model of lm for amplitude -> harmonic regression for seasons
 # for each point in space. Then plot colour map of the amplitude
 
 sin_term <- sin((2*pi*1:12)/12); cos_term <- cos((2*pi*1:12)/12)
 sin2_term <- sin((4*pi*1:12)/12); cos2_term <- cos((4*pi*1:12)/12)
 
-test_lon_ii <- which(lon > -160 & lon < 150)
-test_lat_ii <- which(lat > -80 & lat <80 )
+test_lon_ii <- which(lon > -10 & lon < 0)
+test_lat_ii <- which(lat > 50 & lat <60 )
 temp_test <- temp[test_lon_ii, test_lat_ii,]
 
 n_lat <- length(test_lat_ii)
