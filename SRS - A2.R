@@ -55,6 +55,11 @@ library(lubridate)
 library(dplyr)
 library(tidyr)
 library(ggplot2)
+library(RColorBrewer)
+library(lattice)
+library(fields)
+library(terra)
+library(maps)
 
 
 # Load in Variables
@@ -105,15 +110,15 @@ lines(fit, col="purple", lwd="2") # wait, climate change is real??
 # Define a testing region. These are the coordinates for central Siberia as 
 # seasonal changes are more drastic here. Easier for testing
 
-lon_ii <- which(lon > 90 & lon < 110)
-lat_ii <- which(lat > 55 & lat < 65)
-temp_test <- tmp[lon_ii, lat_ii,]
-
-dim(temp_test)
-
-n_lon <- length(lon_ii)
-n_lat <- length(lat_ii)
-n_time <- dim(temp_test)[3]
+# lon_ii <- which(lon > 90 & lon < 110)
+# lat_ii <- which(lat > 55 & lat < 65)
+# temp_test <- tmp[lon_ii, lat_ii,]
+# 
+# dim(temp_test)
+# 
+# n_lon <- length(lon_ii)
+# n_lat <- length(lat_ii)
+# n_time <- dim(temp_test)[3]
 
 
 
@@ -121,7 +126,7 @@ n_time <- dim(temp_test)[3]
 # compare different climates
 
 # Siberia - Continental: Defined by high seasonal variation. Very warm summers 
-#                        and very cold 
+#                        and very cold winters
 
 lon_ii_S <- which(lon > 90 & lon < 110)
 lat_ii_S <- which(lat > 55 & lat < 65)
@@ -145,7 +150,6 @@ n_lat_I <- length(lat_ii_I)
 # Amazon - Tropical: Defined by consistently high temperatures with weak seasonal
 #                    temperature variation
 
-
 lon_ii_A <- which(lon > -70 & lon < -50)
 lat_ii_A <- which(lat > -10 & lat < 5)
 temp_Amazon <- tmp[lon_ii_A, lat_ii_A, ]
@@ -154,7 +158,7 @@ n_lon_A <- length(lon_ii_A)
 n_lat_A <- length(lat_ii_A)
 
 
-
+n_time <- dim(tmp)[3]
 
 
 
@@ -214,23 +218,23 @@ w <- 2*pi/12
 sin1 <- sin(w * t); sin2 <- sin(2 * w * t); sin3 <- sin(3 * w * t)
 cos1 <- cos(w * t); cos2 <- cos(2 * w * t); cos3 <- cos(3 * w * t)
 
-n_lon_block <- dim(temp_test)[1]
-n_lat_block <- dim(temp_test)[2]
-
 
 
 # Compare Harmonic Regression Models using relative measures of performance 
 # (AIC and BIC)
 
-AIC_order1 <- AIC_order2 <- AIC_order3<- BIC_order1<-BIC_order2<-BIC_order3 <- matrix(0,n_lon_block, n_lat_block)
-best_order_AIC <- best_order_BIC <- matrix(0,n_lon_block, n_lat_block)
-for (i in 1:n_lon_block) {
-  for (j in 1:n_lat_block) {
+# Siberia
+AIC_order1 <- AIC_order2 <- AIC_order3 <- matrix(0,n_lon_S, n_lat_S)
+BIC_order1 <- BIC_order2 <- BIC_order3 <- matrix(0,n_lon_S, n_lat_S)
+best_order_AIC <- best_order_BIC <- matrix(0,n_lon_S, n_lat_S)
+
+for (i in 1:n_lon_S) {
+  for (j in 1:n_lat_S) {
     
-    y <- temp_test[i, j, ]
+    y <- temp_Siberia[i, j, ]
     
     # Remove missing values if needed
-    # if (all(is.na(y))) next
+    if (all(is.na(y))) next
     
     # First order
     mod1 <- lm(y ~ t + sin1 + cos1 + t:sin1 + t:cos1)
@@ -265,17 +269,143 @@ for (i in 1:n_lon_block) {
     )
   }
 }
-summary(mod3)
+
 c(length(which(best_order_AIC == 1)), length(which(best_order_AIC == 2)),
   length(which(best_order_AIC == 3)))
 
+# Best AIC count by order: 0 196 604
+
 c(length(which(best_order_BIC == 1)), length(which(best_order_BIC == 2)),
   length(which(best_order_BIC == 3)))
+
+# Best BIC count by order: 16 703  81
+
+
+# Ireland
+AIC_order1 <- AIC_order2 <- AIC_order3 <- matrix(0,n_lon_I, n_lat_I)
+BIC_order1 <- BIC_order2 <- BIC_order3 <- matrix(0,n_lon_I, n_lat_I)
+best_order_AIC <- best_order_BIC <- matrix(0,n_lon_I, n_lat_I)
+
+for (i in 1:n_lon_I) {
+  for (j in 1:n_lat_I) {
+    
+    y <- temp_Ireland[i, j, ]
+    
+    # Remove missing values if needed
+    if (all(is.na(y))) next
+    
+    # First order
+    mod1 <- lm(y ~ t + sin1 + cos1 + t:sin1 + t:cos1)
+    
+    # Second order
+    mod2 <- lm(y ~ t + sin1 + cos1 + sin2 + cos2 + t:sin1 + t:cos1
+               + t:sin2 + t:cos2)
+    
+    # Third order
+    mod3 <- lm(y ~ t + sin1 + cos1 + sin2 + cos2 +  sin3 + cos3 +
+                 t:sin1 + t:cos1 + t:sin2 + t:cos2 + t:sin3 + t:cos3)
+    
+    AIC_order1[i,j] <- AIC(mod1)
+    AIC_order2[i,j] <- AIC(mod2)
+    AIC_order3[i,j] <- AIC(mod3)
+    
+    BIC_order1[i,j] <- BIC(mod1)
+    BIC_order2[i,j] <- BIC(mod2)
+    BIC_order3[i,j] <- BIC(mod3)
+    
+    
+    best_order_AIC[i,j] <- which.min(
+      c(AIC_order1[i,j],
+        AIC_order2[i,j],
+        AIC_order3[i,j])
+    )
+    
+    best_order_BIC[i,j] <- which.min(
+      c(BIC_order1[i,j],
+        BIC_order2[i,j],
+        BIC_order3[i,j])
+    )
+  }
+}
+
+c(length(which(best_order_AIC == 1)), length(which(best_order_AIC == 2)),
+  length(which(best_order_AIC == 3)))
+
+# Best AIC count by order: 0 69 31
+
+c(length(which(best_order_BIC == 1)), length(which(best_order_BIC == 2)),
+  length(which(best_order_BIC == 3)))
+
+# Best BIC count by order: 16 84  0
+
+
+
+# Amazon
+AIC_order1 <- AIC_order2 <- AIC_order3 <- matrix(0,n_lon_A, n_lat_A)
+BIC_order1 <- BIC_order2 <- BIC_order3 <- matrix(0,n_lon_A, n_lat_A)
+best_order_AIC <- best_order_BIC <- matrix(0,n_lon_A, n_lat_A)
+
+for (i in 1:n_lon_A) {
+  for (j in 1:n_lat_A) {
+    
+    y <- temp_Amazon[i, j, ]
+    
+    # Remove missing values if needed
+    if (all(is.na(y))) next
+    
+    # First order
+    mod1 <- lm(y ~ t + sin1 + cos1 + t:sin1 + t:cos1)
+    
+    # Second order
+    mod2 <- lm(y ~ t + sin1 + cos1 + sin2 + cos2 + t:sin1 + t:cos1
+               + t:sin2 + t:cos2)
+    
+    # Third order
+    mod3 <- lm(y ~ t + sin1 + cos1 + sin2 + cos2 +  sin3 + cos3 +
+                 t:sin1 + t:cos1 + t:sin2 + t:cos2 + t:sin3 + t:cos3)
+    
+    AIC_order1[i,j] <- AIC(mod1)
+    AIC_order2[i,j] <- AIC(mod2)
+    AIC_order3[i,j] <- AIC(mod3)
+    
+    BIC_order1[i,j] <- BIC(mod1)
+    BIC_order2[i,j] <- BIC(mod2)
+    BIC_order3[i,j] <- BIC(mod3)
+    
+    
+    best_order_AIC[i,j] <- which.min(
+      c(AIC_order1[i,j],
+        AIC_order2[i,j],
+        AIC_order3[i,j])
+    )
+    
+    best_order_BIC[i,j] <- which.min(
+      c(BIC_order1[i,j],
+        BIC_order2[i,j],
+        BIC_order3[i,j])
+    )
+  }
+}
+
+c(length(which(best_order_AIC == 1)), length(which(best_order_AIC == 2)),
+  length(which(best_order_AIC == 3)))
+
+# Best AIC count by order: 0 441 749
+
+c(length(which(best_order_BIC == 1)), length(which(best_order_BIC == 2)),
+  length(which(best_order_BIC == 3)))
+
+# Best BIC count by order:0 1060  130
+
+
+
 
 
 # AIC values favour 3rd order harmonics but reduction in AIC is not huge between
 # 2nd order and 3rd order. This is reflected by the BIC which penalises 
 # the additional parameters more heavily and favours the second order model 
+
+
 
 
 
@@ -292,13 +422,15 @@ c(length(which(best_order_BIC == 1)), length(which(best_order_BIC == 2)),
 # To test amplitude and phase in isolation I think the yearly models and looking
 # at trends in amp and phase is more appropriate
 
-models_list <- list()
-interaction_pvals <- matrix(NA, n_lon_block, n_lat_block)
 
-for (i in 1:n_lon_block) {
-  for (j in 1:n_lat_block) {
+# Siberia
+models_list_S <- list()
+interaction_pvals_S <- matrix(NA, n_lon_S, n_lat_S)
+
+for (i in 1:n_lon_S) {
+  for (j in 1:n_lat_S) {
     
-    y <- temp_test[i, j, ]
+    y <- temp_Siberia[i, j, ]
     
     if (all(is.na(y))) next
     
@@ -307,11 +439,11 @@ for (i in 1:n_lon_block) {
     mod2 <- lm(y ~ t + sin1 + cos1 + sin2 + cos2 + 
                  t:sin1 + t:cos1 + t:sin2 + t:cos2)
     
-    models_list[[paste0("lon", i, "_lat", j)]] <- mod2
+    models_list_S[[paste0("lon", i, "_lat", j)]] <- mod2
     
     Ftest <- anova(mod2_reduced, mod2)
     
-    interaction_pvals[i, j] <- Ftest$`Pr(>F)`[2]
+    interaction_pvals_S[i, j] <- Ftest$`Pr(>F)`[2]
     
   }
 }
@@ -320,43 +452,114 @@ for (i in 1:n_lon_block) {
 # Benjamini-Hochberg Correction for Multiple Testing. Maybe need to look
 # at assumptions for this because I think the tests may be spatially dependent and
 # independence may be an assumption
-p_adjusted <- matrix(p.adjust(as.vector(interaction_pvals), method="BH"),
-                     nrow=nrow(interaction_pvals))
+p_adjusted_S <- matrix(p.adjust(as.vector(interaction_pvals_S), method="BH"),
+                     nrow=nrow(interaction_pvals_S))
 
-p_adjusted_sig <- p_adjusted < 0.05
-p_adjusted_sig
+p_adjusted_sig_S <- p_adjusted_S < 0.05
+p_adjusted_sig_S
 
 
-lon_region <- lon[lon_ii]
-lat_region <- lat[lat_ii]
 
-lon_region
-lat_region
-
-map_p_vals = matrix(NA, nrow = length(lon), ncol = length(lat))
-map_p_vals[lat_region, lon_region] = interaction_pvals
-
-library(maps)
-image.plot(lon,
-           lat,
-           map_p_vals,
-           main = "Seasonal Interaction p-values (Siberia)",
-           xlab = "Longitude",
-           ylab = "Latitude")
-
-image.plot(lon_region,
-           lat_region,
-           p_adjusted,
+image.plot(lon[lon_ii_S],
+           lat[lat_ii_S],
+           p_adjusted_S,
            xlab = "Longitude",
            ylab = "Latitude",
            main = "Seasonal Interaction p-values (Siberia)",
            col = topo.colors(50))
 
 
-map("world",
-    add = TRUE,
-    col = "black",
-    lwd = 1)
+
+
+# Ireland
+models_list_I <- list()
+interaction_pvals_I <- matrix(NA, n_lon_I, n_lat_I)
+
+for (i in 1:n_lon_I) {
+  for (j in 1:n_lat_I) {
+    
+    y <- temp_Ireland[i, j, ]
+    
+    if (all(is.na(y))) next
+    
+    mod2_reduced <- lm(y ~ t + sin1 + cos1 + sin2 + cos2)
+    
+    mod2 <- lm(y ~ t + sin1 + cos1 + sin2 + cos2 + 
+                 t:sin1 + t:cos1 + t:sin2 + t:cos2)
+    
+    models_list_I[[paste0("lon", i, "_lat", j)]] <- mod2
+    
+    Ftest <- anova(mod2_reduced, mod2)
+    
+    interaction_pvals_I[i, j] <- Ftest$`Pr(>F)`[2]
+    
+  }
+}
+
+p_adjusted_I <- matrix(p.adjust(as.vector(interaction_pvals_I), method="BH"),
+                       nrow=nrow(interaction_pvals_I))
+
+p_adjusted_sig_I <- p_adjusted_I < 0.05
+p_adjusted_sig_I
+
+
+
+image.plot(lon[lon_ii_I],
+           lat[lat_ii_I],
+           p_adjusted_I,
+           xlab = "Longitude",
+           ylab = "Latitude",
+           main = "Seasonal Interaction p-values (Ireland)",
+           col = topo.colors(50))
+
+
+plot(temp_Ireland[n_lon_I, n_lat_I, ])
+
+
+n_lon_I
+# Amazon
+models_list_A <- list()
+interaction_pvals_A <- matrix(NA, n_lon_A, n_lat_A)
+
+for (i in 1:n_lon_A) {
+  for (j in 1:n_lat_A) {
+    
+    y <- temp_Amazon[i, j, ]
+    
+    if (all(is.na(y))) next
+    
+    mod2_reduced <- lm(y ~ t + sin1 + cos1 + sin2 + cos2)
+    
+    mod2 <- lm(y ~ t + sin1 + cos1 + sin2 + cos2 + 
+                 t:sin1 + t:cos1 + t:sin2 + t:cos2)
+    
+    models_list_A[[paste0("lon", i, "_lat", j)]] <- mod2
+    
+    Ftest <- anova(mod2_reduced, mod2)
+    
+    interaction_pvals_A[i, j] <- Ftest$`Pr(>F)`[2]
+    
+  }
+}
+
+p_adjusted_A <- matrix(p.adjust(as.vector(interaction_pvals_A), method="BH"),
+                       nrow=nrow(interaction_pvals_A))
+
+p_adjusted_sig_A <- p_adjusted_A < 0.05
+p_adjusted_sig_A
+
+
+
+image.plot(lon[lon_ii_A],
+           lat[lat_ii_A],
+           p_adjusted_A,
+           xlab = "Longitude",
+           ylab = "Latitude",
+           main = "Seasonal Interaction p-values (Ireland)",
+           col = topo.colors(50))
+
+
+
 
 
 
