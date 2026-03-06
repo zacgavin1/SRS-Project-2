@@ -1,16 +1,18 @@
 ###
-# Across the three regions, the monthly temperature series are dominated by seasonal variation.
+# Across the three regions, the monthly temperature series are strongly seasonal.
 # This motivates modelling trend and seasonality explicitly before defining extremes using residuals.
-# We define an extreme-hot month as a residual exceeding the baseline Q95. 
-# Under this definition, Siberia shows a clear and statistically significant increase in extreme-hot month frequency.
-# The estimated decadal rate ratios are consistently above 1 across model specifications.
-# The result is also broadly robust to the choice of baseline period.
-# In contrast, Ireland and Singapore show no robust evidence of a long-run increase under the same definition.
-# Their estimated decadal rate ratios are close to 1, and the confidence intervals typically span 1.
-# Diagnostics further suggest strong residual autocorrelation in Singapore. 
-# Adding an ARMA error structure therefore substantially improves model fit.
-# For Siberia, the seasonal structure appears more complex than a simple sinusoid.
-# This favours a flexible month-factor representation.
+# We define an extreme-hot month as one in which the residual exceeds the baseline-period Q95 threshold.
+#
+# Under this residual-based definition, Siberia shows a clear and statistically significant increase
+# in the frequency of extreme-hot months. Estimated decadal rate ratios are consistently above 1,
+# and this conclusion is broadly robust to the choice of baseline period.
+#
+# In contrast, Ireland and Singapore show no statistically detectable long-run increase under the same definition.
+# Their estimated decadal rate ratios are close to 1, and the corresponding confidence intervals include 1.
+#
+# The regional comparison also suggests differences in seasonal structure.
+# In Siberia, the seasonal pattern appears more complex than a simple sinusoid,
+# so a flexible month-factor specification performs best.
 ###
 # Region: Singapore bbox
 
@@ -114,21 +116,25 @@ ext_indicator <- function(residualv, th) {
   as.integer(residualv > th$q95)
 }
 
-# Fit Poisson trend for yearly extreme counts
+# Fit Quasi-Poisson trend for yearly extreme counts
 fit_trend <- function(countv, years, exposure) {
-  glm(countv ~ years, family = poisson(link = "log"), offset = log(exposure))
+  glm(countv ~ years, family = quasipoisson(link = "log"), offset = log(exposure))
 }
 
-# Extract "per 10-year multiplier" from Poisson model
+# Extract "per 10-year multiplier" from Quasi-Poisson model
 ext_trend <- function(glm_fit) {
   b <- coef(glm_fit)["years"]
   se <- sqrt(vcov(glm_fit)["years", "years"])
+  
+  coefs <- summary(glm_fit)$coefficients
+  pcol <- if ("Pr(>|z|)" %in% colnames(coefs)) "Pr(>|z|)" else "Pr(>|t|)"
+  
   tibble(
     beta_year = b,
     mult_per_10yr = exp(b * 10),
     ci_low = exp((b - 1.96 * se) * 10),
     ci_high = exp((b + 1.96 * se) * 10),
-    p_value = summary(glm_fit)$coefficients["years", "Pr(>|z|)"]
+    p_value = coefs["years", pcol]
   )
 }
 
@@ -198,7 +204,7 @@ comparison <- tibble(
   AIC = c(AIC(m1), AIC(m2), AIC(m3), m4$aic),
   BIC = c(BIC(m1), BIC(m2), BIC(m3), AIC(m4, k = log(nrow(df_m3))))
 )
-# For Singapore, adding an ARMA error structure leads to a substantial improvement in fit.
+# In the Singapore region, adding an ARMA error structure leads to a substantial improvement in fit.
 # This indicates strong temporal correlation in the error term of the monthly temperature series.
 # Without an ARMA component, this dependence would be left in the residuals, noticeably worsening model fit.
 # Regarding seasonality, M1 and M3 have similar AIC values, whereas M2 performs worst,
@@ -211,8 +217,10 @@ df$res_m2 <- resid(m2)
 df$res_m3 <- resid(m3)
 df$res_m4 <- as.numeric(residuals(m4))
 
-# Sensitivity analysis across alternative 30-year baselines shows that
-# the substantive conclusion (no robust increasing trend) is not driven by this choice.
+# Sensitivity analysis for different baseline periods
+# A sensitivity analysis across alternative 30-year baselines shows that
+# the estimated decadal rate ratios remain close to 1 and none of the trend estimates is statistically significant.
+# This indicates that the substantive conclusion of no robust increasing trend is not driven by the choice of baseline period.
 baseline_sets <- list(
   "1901-1930" = 1901:1930,
   "1931-1960" = 1931:1960,
@@ -235,7 +243,7 @@ trend_one <- function(residual_vec, years_vec, baseline_years) {
     group_by(years) %>%
     summarise(n_months = n(), extreme_months = sum(ext, na.rm = TRUE), .groups = "drop")
   
-  fit <- glm(extreme_months ~ years, family = poisson(link = "log"), offset = log(n_months), data = yearly)
+  fit <- glm(extreme_months ~ years, family = quasipoisson(link = "log"), offset = log(n_months), data = yearly)
   
   ext_trend(fit) %>%
     mutate(q95 = th$q95) %>%
@@ -270,9 +278,9 @@ th_m4 <- thresholds(df$res_m4, df$year, bly)
 df$ext_m1 <- ext_indicator(df$res_m1, th_m1)
 df$ext_m2 <- ext_indicator(df$res_m2, th_m2)
 df$ext_m3 <- ext_indicator(df$res_m3, th_m3)
-df$ext_m4 <- ext_indicator(df$res_m4, th_m4)
+df$ext_m4 <- ext_indicator(df$res_m3, th_m3)
 
-# Yearly extreme month counts and Poisson trend tests
+# Yearly extreme month counts and Quasi-Poisson trend tests
 # aggregate monthly 0/1 extreme indicators into yearly counts
 yearly_ext <- df %>%
   group_by(year) %>%
@@ -285,7 +293,7 @@ yearly_ext <- df %>%
     .groups = "drop"
   )
 
-# fit Poisson regressions for trend over years with exposure offset
+# fit Quasi-Poisson regressions for trend over years with exposure offset
 p_m1 <- fit_trend(yearly_ext$count_m1, yearly_ext$year, yearly_ext$n_months)
 p_m2 <- fit_trend(yearly_ext$count_m2, yearly_ext$year, yearly_ext$n_months)
 p_m3 <- fit_trend(yearly_ext$count_m3, yearly_ext$year, yearly_ext$n_months)
@@ -300,13 +308,14 @@ trend_table <- bind_rows(
   .id = "model"
 )
 
-# It is found that no statistically detectable long-term increase in the frequency of extreme-hot months in Singapore from 1900–2012
-# Estimated decadal rate ratios are close to 1, with 95% CIs generally spanning 1.
+# There is no statistically detectable long-term increase in the frequency of extreme-hot months in Singapore from 1900 to 2012.
+# Estimated decadal rate ratios are close to 1, and all 95% confidence intervals include 1.
 print(trend_table)
 
 # Plots
 # (1) monthly mean temperature
-# The seasonal variation is very small (ranging roughly between 26–29), much smaller than that of Ireland and siberia.
+# The seasonal variation is very small (roughly between 26 and 29°C),
+# much smaller than that observed in Ireland or Siberia.
 ggplot(df, aes(x = date, y = temp)) +
   geom_line() +
   labs(title = "Singapore Monthly Mean Temperature",
@@ -315,21 +324,23 @@ ggplot(df, aes(x = date, y = temp)) +
   theme_minimal()
 
 # (2) Residuals with thresholds
-# The occurrence of the extreme hot month does not increase significantly over time.
-ggplot(df, aes(x = date, y = res_m4)) +
+# After removing trend and seasonality, the residual series fluctuates around zero.
+# Exceedances of the baseline Q95 threshold occur throughout the record,
+# but there is no clear visual evidence that they become more frequent over time.
+ggplot(df, aes(x = date, y = res_m1)) +
   geom_line() +
-  geom_hline(yintercept = th_m4$q95, linetype = 2) +
-  geom_hline(yintercept = th_m4$q05, linetype = 2) +
-  labs(title = paste0("Singapore Residuals (M4) with Baseline Thresholds (", min(bly), "-", max(bly), ")"),
+  geom_hline(yintercept = th_m1$q95, linetype = 2) +
+  geom_hline(yintercept = th_m1$q05, linetype = 2) +
+  labs(title = paste0("Singapore Residuals (M1) with Baseline Thresholds (", min(bly), "-", max(bly), ")"),
        subtitle = "Extreme Hot Month: residual > baseline Q95",
        x = "Date", y = "Residual (°C)") +
   theme_minimal()
 
-# (3) Yearly extreme-hot months with poisson trend
-# In the Singapore region, the annual frequency does not exhibit a clear long-term increasing trend.
-# Across models, the Poisson trend lines are broadly flat (and in some cases slightly decreasing),
-# with substantial year-to-year variability. 
-# This suggests that there is no robust upward trend in the frequency of extreme hot months in Singapore.
+# (3) Yearly extreme-hot months with quasi-Poisson trend
+# In Singapore, the annual number of extreme-hot months does not exhibit a clear long-term increasing trend.
+# Across models, the quasi-Poisson fitted trends are broadly flat, with only small model-dependent changes
+# and substantial year-to-year variability.
+# This suggests that there is no robust upward trend in the frequency of extreme-hot months in Singapore.
 
 # create prediction data for model
 make_pred <- function(yearly_ext, fit_pois, model_name, count_col) {
@@ -362,16 +373,16 @@ ext_hot <- ggplot(pred_all, aes(x = year)) +
   annotate("rect", xmin = min(bly), xmax = max(bly), ymin = -Inf, ymax = Inf, alpha = 0.12) +
   # 95% confidence interval band for fitted mean
   geom_ribbon(aes(ymin = lo, ymax = hi), alpha = 0.18) +
-  # fitted Poisson mean curve
+  # fitted Quasi-Poisson mean curve
   geom_line(aes(y = fit), linewidth = 1) +
   # observed yearly counts
   geom_line(aes(y = extreme_months), alpha = 0.85) +
   geom_point(aes(y = extreme_months), size = 1.0) +
   
   facet_wrap(~ model, ncol = 2, scales = "free_y") +
-  labs(title = "Singapore: Yearly Extreme Hot Months with Poisson Trend",
-    x = "Year",
-    y = "Extreme Hot Months Per Year",
+  labs(title = "Singapore: Yearly Extreme Hot Months with Quasi-Poisson Trend",
+       x = "Year",
+       y = "Extreme Hot Months Per Year",
   ) +
   theme_minimal() +
   theme(

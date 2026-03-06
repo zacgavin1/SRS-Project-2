@@ -1,37 +1,42 @@
 ###
-# Extreme hot months are defined as months in which, after controlling for long term trend and seasonality,
-# the temperature residual exceeds the 95th percentile of the residual distribution in the baseline period.
-# res = observed temp - model predicted temp
-# Using residuals removes the components explained by trend and seasonality,
-# thereby isolating anomalies and reducing the influence of long term warming.
-# A month is classified as an extreme hot month if its residual is above the baseline Q95 threshold, and is coded as 1
-# Otherwise it is coded as 0. This gives each month a binary 0/1 label.
+# Extreme-hot months are defined using residuals from the non-ARMA trend-seasonality models.
+# After controlling for long-term trend and seasonality, a residual is computed as:
+# residual = observed temperature - model-predicted temperature.
+# Using residuals removes the variation explained by trend and seasonality,
+# thereby isolating temperature anomalies and reducing the direct influence of long-term warming.
+# A month is classified as an extreme-hot month if its residual exceeds the baseline-period Q95 threshold,
+# and is coded as 1; otherwise it is coded as 0.
+# This gives each month a binary 0/1 indicator of whether it is unusually warm relative to the fitted baseline.
 ###
-# The baseline period is 1901 to 1930.
-# A sensitivity analysis was conducted using multiple 30 year baseline windows：1901–1930、1931–1960、1961–1990、1981–2010
-# The results show that the per decade rate ratios are all close to 1, their 95% confidence intervals all include 1, 
-# and all p values are greater than 0.05. 
-# This indicates that the conclusions are not sensitive to the choice of baseline, supporting the use of 1901–1930.
+# The main baseline period is 1901-1930.
+# A sensitivity analysis was carried out using multiple 30-year baseline windows:
+# 1901-1930, 1931-1960, 1961-1990, and 1981-2010.
+# For Ireland, the estimated per-decade rate ratios are close to 1, their 95% confidence intervals include 1,
+# and the p-values are greater than 0.05 across these alternative baselines.
+# This indicates that the substantive conclusion is not sensitive to the choice of baseline period,
+# supporting the use of 1901-1930 as the main reference window.
 ###
-# A Poisson regression is used to test for a temporal trend because the outcome is a count.
-# The model is log(lamda_y) = alpha + beta*year +log(n_months)
-# where lamda_y is the expected number of extreme hot months in year y.
-# The coefficient beta represents the change associated with a one year increase. 
-# Because this effect is typically small,
-# it is converted to a per decade change to match the long term scale of the research question.
+# A quasi-Poisson regression is used to test for a temporal trend because the outcome is a yearly count
+# of extreme-hot months, and temporal clustering may induce overdispersion.
+# The model is:
+# log(lambda_y) = alpha + beta * year + log(n_months),
+# where lambda_y is the expected number of extreme-hot months in year y.
+# The coefficient beta represents the change associated with a one-year increase.
+# Because this yearly effect is usually small, it is converted to a per-decade change
+# to better match the long-run scale of the research question.
 ###
 # Region: Ireland bbox
 ###
 # Pipeline:
 #  1) Read NetCDF by time slices
-#  2) Compute area-weighted monthly mean temp
-#  3) Fit 4 models:
+#  2) Compute area-weighted monthly mean temperature
+#  3) Fit 4 candidate models:
 #     M1: year + factor(month)
 #     M2: year + 1st harmonic
 #     M3: year + 2nd harmonic
-#     M4: M3 + ARMA errors (arima with xreg)
-#  4) Residual-based extremes using baseline thresholds
-#  5) Count extreme months per year + Poisson trend test
+#     M4: M3 + ARMA errors (used for fit/diagnostic comparison only)
+#  4) Define residual-based extreme-hot months using non-ARMA residuals and baseline Q95 thresholds
+#  5) Count extreme-hot months per year and test for trend using quasi-Poisson regression
 ###
 
 library(ncdf4)
@@ -134,21 +139,25 @@ ext_indicator <- function(residualv, th) {
   as.integer(residualv > th$q95)
 }
 
-# Fit Poisson trend for yearly extreme counts
+# Fit Quasi-Poisson trend for yearly extreme counts
 fit_trend <- function(countv, years, exposure) {
-  glm(countv ~ years, family = poisson(link = "log"), offset = log(exposure))
+  glm(countv ~ years, family = quasipoisson(link = "log"), offset = log(exposure))
 }
 
-# Extract "per 10-year multiplier" from Poisson model
+# Extract "per 10-year multiplier" from Quasi-Poisson model
 ext_trend <- function(glm_fit) {
   b <- coef(glm_fit)["years"]
   se <- sqrt(vcov(glm_fit)["years", "years"])
+  
+  coefs <- summary(glm_fit)$coefficients
+  pcol <- if ("Pr(>|z|)" %in% colnames(coefs)) "Pr(>|z|)" else "Pr(>|t|)"
+  
   tibble(
     beta_year = b,
     mult_per_10yr = exp(b * 10),
     ci_low = exp((b - 1.96 * se) * 10),
     ci_high = exp((b + 1.96 * se) * 10),
-    p_value = summary(glm_fit)$coefficients["years", "Pr(>|z|)"]
+    p_value = coefs["years", pcol]
   )
 }
 
@@ -218,10 +227,10 @@ comparison <- tibble(
   AIC = c(AIC(m1), AIC(m2), AIC(m3), m4$aic),
   BIC = c(BIC(m1), BIC(m2), BIC(m3), AIC(m4, k = log(nrow(df_m3))))
 )
-# M4 performs best because it captures the temporal autocorrelation in the residuals, 
-# whereas M2 performs worst because a first-order harmonic is too coarse to represent the detailed seasonal pattern of temperature
-# This indicates that, even after controlling for the long-term trend and seasonality, 
-# the temperature series still exhibits substantial residual autocorrelation
+# In the Ireland region, the information criteria indicate that M1 provides the best fit among the main candidate models,
+# while M2 performs worst.
+# This suggests that a first-order harmonic is too coarse to capture the seasonal structure of monthly temperature,
+# whereas a more flexible month-factor specification is better suited to the main analysis.
 print(comparison)
 
 # Residuals
@@ -253,7 +262,7 @@ trend_one <- function(residual_vec, years_vec, baseline_years) {
     group_by(years) %>%
     summarise(n_months = n(), extreme_months = sum(ext, na.rm = TRUE), .groups = "drop")
   
-  fit <- glm(extreme_months ~ years, family = poisson(link = "log"), offset = log(n_months), data = yearly)
+  fit <- glm(extreme_months ~ years, family = quasipoisson(link = "log"), offset = log(n_months), data = yearly)
   
   ext_trend(fit) %>%
     mutate(q95 = th$q95) %>%
@@ -268,7 +277,7 @@ sens_table <- bind_rows(
       M1 = trend_one(df$res_m1, df$year, bly_i),
       M2 = trend_one(df$res_m2, df$year, bly_i),
       M3 = trend_one(df$res_m3, df$year, bly_i),
-      M4 = trend_one(df$res_m4, df$year, bly_i),
+      M4 = trend_one(df$res_m3, df$year, bly_i),
       .id = "model"
     ) %>% mutate(baseline = bn, .before = 1)
   })
@@ -288,9 +297,13 @@ th_m4 <- thresholds(df$res_m4, df$year, bly)
 df$ext_m1 <- ext_indicator(df$res_m1, th_m1)
 df$ext_m2 <- ext_indicator(df$res_m2, th_m2)
 df$ext_m3 <- ext_indicator(df$res_m3, th_m3)
-df$ext_m4 <- ext_indicator(df$res_m4, th_m4)
+# For extreme classification, use non-ARMA residuals (M3) rather than ARMA residuals,
+# so that persistence is not absorbed by the error model.
+# As a result, the M4 trend panel uses the same extreme-month classification as M3,
+# while M4 itself is retained for model-fit and autocorrelation diagnostics.
+df$ext_m4 <- ext_indicator(df$res_m3, th_m3)
 
-# Yearly extreme month counts and Poisson trend tests
+# Yearly extreme month counts and Quasi-Poisson trend tests
 # aggregate monthly 0/1 extreme indicators into yearly counts
 yearly_ext <- df %>%
   group_by(year) %>%
@@ -303,7 +316,7 @@ yearly_ext <- df %>%
     .groups = "drop"
   )
 
-# fit Poisson regressions for trend over years with exposure offset
+# fit Quasi-Poisson regressions for trend over years with exposure offset
 p_m1 <- fit_trend(yearly_ext$count_m1, yearly_ext$year, yearly_ext$n_months)
 p_m2 <- fit_trend(yearly_ext$count_m2, yearly_ext$year, yearly_ext$n_months)
 p_m3 <- fit_trend(yearly_ext$count_m3, yearly_ext$year, yearly_ext$n_months)
@@ -318,8 +331,8 @@ trend_table <- bind_rows(
   .id = "model"
 )
 
-# The estimated 10-year rate ratios are all close to 1 with 95% CIs spanning 1 and p-values > 0.05 across M1–M4,
-# indicating no statistically detectable long-term trend in the frequency of extreme-hot months for Ireland under this specification
+# The estimated 10-year rate ratios are all very close to 1, with 95% CIs spanning 1 and p-values > 0.05 across M1–M4.
+# This indicates no statistically detectable long-term trend in the frequency of extreme-hot months in Ireland under this definition.
 print(trend_table)
 
 # Plots
@@ -336,24 +349,24 @@ ggplot(df, aes(x = date, y = temp)) +
   theme_minimal()
 
 # (2) Residuals with thresholds
-# After accounting for long term trends and seasonal patterns, 
-# extreme hot months defined as residuals above the baseline 95th percentile occur throughout the entire study period,
-# but the plot shows no obvious clustering over time or a sustained upward trend.
-ggplot(df, aes(x = date, y = res_m4)) +
+# After accounting for long-term trend and seasonality, the residual series fluctuates around zero.
+# Months exceeding the baseline Q95 threshold occur throughout the record,
+# but there is no clear visual evidence that such exceedances become systematically more frequent over time.
+ggplot(df, aes(x = date, y = res_m3)) +
   geom_line() +
-  geom_hline(yintercept = th_m4$q95, linetype = 2) +
-  geom_hline(yintercept = th_m4$q05, linetype = 2) +
-  labs(title = paste0("Ireland Residuals (M4) with Baseline Thresholds (", min(bly), "-", max(bly), ")"),
+  geom_hline(yintercept = th_m3$q95, linetype = 2) +
+  geom_hline(yintercept = th_m3$q05, linetype = 2) +
+  labs(title = paste0("Ireland Residuals (M3) with Baseline Thresholds (", min(bly), "-", max(bly), ")"),
        subtitle = "Extreme Hot Month: residual > baseline Q95",
        x = "Date", y = "Residual (°C)") +
   theme_minimal()
 
-# (3) Yearly extreme-hot months with poisson trend
-# The annual count of extreme hot months fluctuates between 0 and 4, with most years recording 0 to 1.
-# Under a Poisson regression, the expected number of extreme months remains broadly stable over time or shows a slight decline,
-# and the trend lines are consistent across all four models.
-# This suggests that, under this definition of extremes,
-# there is no detectable long term increase in the frequency of extreme hot months in Ireland from 1900 to 2012.
+# (3) Yearly extreme-hot months with quasi-Poisson trend
+# The annual count of extreme-hot months fluctuates between 0 and 4, with most years recording 0 or 1.
+# Under the fitted count models, the expected number of extreme-hot months remains broadly stable over time,
+# with only very small model-dependent changes and no statistically significant trend.
+# This suggests that, under this residual-based definition of extremes,
+# there is no detectable long-term increase in the frequency of extreme-hot months in Ireland from 1900 to 2012.
 
 # create prediction data for model
 make_pred <- function(yearly_ext, fit_pois, model_name, count_col) {
@@ -386,14 +399,14 @@ ext_hot <- ggplot(pred_all, aes(x = year)) +
   annotate("rect", xmin = min(bly), xmax = max(bly), ymin = -Inf, ymax = Inf, alpha = 0.12) +
   # 95% confidence interval band for fitted mean
   geom_ribbon(aes(ymin = lo, ymax = hi), alpha = 0.18) +
-  # fitted Poisson mean curve
+  # fitted Quasi-Poisson mean curve
   geom_line(aes(y = fit), linewidth = 1) +
   # observed yearly counts
   geom_line(aes(y = extreme_months), alpha = 0.85) +
   geom_point(aes(y = extreme_months), size = 1.0) +
 
   facet_wrap(~ model, ncol = 2, scales = "free_y") +
-  labs(title = "Ireland: Yearly Extreme Hot Months with Poisson Trend",
+  labs(title = "Ireland: Yearly Extreme Hot Months with Quasi-Poisson Trend",
     x = "Year",
     y = "Extreme Hot Months Per Year",
   ) +

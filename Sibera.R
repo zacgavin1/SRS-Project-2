@@ -100,21 +100,25 @@ ext_indicator <- function(residualv, th) {
   as.integer(residualv > th$q95)
 }
 
-# Fit Poisson trend for yearly extreme counts
+# Fit Quasi-Poisson trend for yearly extreme counts
 fit_trend <- function(countv, years, exposure) {
-  glm(countv ~ years, family = poisson(link = "log"), offset = log(exposure))
+  glm(countv ~ years, family = quasipoisson(link = "log"), offset = log(exposure))
 }
 
-# Extract "per 10-year multiplier" from Poisson model
+# Extract "per 10-year multiplier" from Quasi-Poisson model
 ext_trend <- function(glm_fit) {
   b <- coef(glm_fit)["years"]
   se <- sqrt(vcov(glm_fit)["years", "years"])
+  
+  coefs <- summary(glm_fit)$coefficients
+  pcol <- if ("Pr(>|z|)" %in% colnames(coefs)) "Pr(>|z|)" else "Pr(>|t|)"
+  
   tibble(
     beta_year = b,
     mult_per_10yr = exp(b * 10),
     ci_low = exp((b - 1.96 * se) * 10),
     ci_high = exp((b + 1.96 * se) * 10),
-    p_value = summary(glm_fit)$coefficients["years", "Pr(>|z|)"]
+    p_value = coefs["years", pcol]
   )
 }
 
@@ -184,14 +188,12 @@ comparison <- tibble(
   AIC = c(AIC(m1), AIC(m2), AIC(m3), m4$aic),
   BIC = c(BIC(m1), BIC(m2), BIC(m3), AIC(m4, k = log(nrow(df_m3))))
 )
-# In the Siberia region, the information criteria indicate that M1 provides the best fit among the four candidate models,
-# achieving the lowest AIC and BIC. 
-# M4—which augments M3 with ARMA(2,0,2) errors—ranks second, while M2/M3 perform substantially worse.
-# This pattern suggests that Siberia’s monthly temperature seasonality is relatively complex and deviates from a simple sinusoidal form,
-# so a flexible month-factor specification captures it more effectively. 
-# Although adding an ARMA error structure improves fit relative to M3,
-# implying residual autocorrelation remains after controlling for trend and seasonality,
-# it does not outperform the more flexible month-factor representation overall.
+# In the Siberia region, the information criteria indicate that M1 provides the best fit among the main candidate models,
+# achieving the lowest AIC and BIC.
+# By contrast, M2 and M3 perform substantially worse, indicating that low-order harmonic terms are not flexible enough
+# to capture the seasonal structure of monthly temperature in this region.
+# This suggests that Siberia’s seasonality is relatively complex and deviates from a simple sinusoidal form,
+# so a flexible month-factor specification is preferred for the main analysis.
 print(comparison)
 
 # Residuals
@@ -201,10 +203,11 @@ df$res_m3 <- resid(m3)
 df$res_m4 <- as.numeric(residuals(m4))
 
 # Sensitivity analysis for different baseline periods
-# A sensitivity analysis across multiple 30-year baselines shows that 
-# the estimated per-decade rate ratios remain generally above 1 and the direction of the trend is unchanged,
-# indicating that our conclusions are not driven by the specific baseline choice. 
-# Later baselines yield higher Q95 thresholds and therefore more conservative tests, which can attenuate statistical significance.
+# A sensitivity analysis across multiple 30-year baselines shows that the estimated per-decade rate ratios are consistently above 1,
+# and the direction of the trend remains positive across all models and baseline choices.
+# Statistical significance is strongest for M1 and under the earliest and latest baselines,
+# while some intermediate baseline-model combinations are only marginally non-significant.
+# Overall, the conclusion of an increasing frequency of extreme-hot months in Siberia is not driven by a single baseline choice.
 baseline_sets <- list(
   "1901-1930" = 1901:1930,
   "1931-1960" = 1931:1960,
@@ -227,7 +230,7 @@ trend_one <- function(residual_vec, years_vec, baseline_years) {
     group_by(years) %>%
     summarise(n_months = n(), extreme_months = sum(ext, na.rm = TRUE), .groups = "drop")
   
-  fit <- glm(extreme_months ~ years, family = poisson(link = "log"), offset = log(n_months), data = yearly)
+  fit <- glm(extreme_months ~ years, family = quasipoisson(link = "log"), offset = log(n_months), data = yearly)
   
   ext_trend(fit) %>%
     mutate(q95 = th$q95) %>%
@@ -242,7 +245,7 @@ sens_table <- bind_rows(
       M1 = trend_one(df$res_m1, df$year, bly_i),
       M2 = trend_one(df$res_m2, df$year, bly_i),
       M3 = trend_one(df$res_m3, df$year, bly_i),
-      M4 = trend_one(df$res_m4, df$year, bly_i),
+      M4 = trend_one(df$res_m3, df$year, bly_i),
       .id = "model"
     ) %>% mutate(baseline = bn, .before = 1)
   })
@@ -262,9 +265,9 @@ th_m4 <- thresholds(df$res_m4, df$year, bly)
 df$ext_m1 <- ext_indicator(df$res_m1, th_m1)
 df$ext_m2 <- ext_indicator(df$res_m2, th_m2)
 df$ext_m3 <- ext_indicator(df$res_m3, th_m3)
-df$ext_m4 <- ext_indicator(df$res_m4, th_m4)
+df$ext_m4 <- ext_indicator(df$res_m3, th_m3)
 
-# Yearly extreme month counts and Poisson trend tests
+# Yearly extreme month counts and Quasi-Poisson trend tests
 # aggregate monthly 0/1 extreme indicators into yearly counts
 yearly_ext <- df %>%
   group_by(year) %>%
@@ -277,7 +280,7 @@ yearly_ext <- df %>%
     .groups = "drop"
   )
 
-# fit Poisson regressions for trend over years with exposure offset
+# fit Quasi-Poisson regressions for trend over years with exposure offset
 p_m1 <- fit_trend(yearly_ext$count_m1, yearly_ext$year, yearly_ext$n_months)
 p_m2 <- fit_trend(yearly_ext$count_m2, yearly_ext$year, yearly_ext$n_months)
 p_m3 <- fit_trend(yearly_ext$count_m3, yearly_ext$year, yearly_ext$n_months)
@@ -309,22 +312,23 @@ ggplot(df, aes(x = date, y = temp)) +
   theme_minimal()
 
 # (2) Residuals with thresholds
-# Under the baseline Q95, months with abnormally warm temperatures occurred more frequently in the later period.
-ggplot(df, aes(x = date, y = res_m4)) +
+# The residual series fluctuates around zero after removing trend and seasonality.
+# Exceedances of the baseline Q95 threshold occur throughout the record,
+# but they appear more frequent in later decades, which is consistent with an increase in extreme-hot months over time.
+ggplot(df, aes(x = date, y = res_m1)) +
   geom_line() +
-  geom_hline(yintercept = th_m4$q95, linetype = 2) +
-  geom_hline(yintercept = th_m4$q05, linetype = 2) +
-  labs(title = paste0("Siberia Residuals (M4) with Baseline Thresholds (", min(bly), "-", max(bly), ")"),
+  geom_hline(yintercept = th_m1$q95, linetype = 2) +
+  geom_hline(yintercept = th_m1$q05, linetype = 2) +
+  labs(title = paste0("Siberia Residuals (M1) with Baseline Thresholds (", min(bly), "-", max(bly), ")"),
        subtitle = "Extreme Hot Month: residual > baseline Q95",
        x = "Date", y = "Residual (°C)") +
   theme_minimal()
 
-# (3) Yearly extreme-hot months with poisson trend
-# In the Siberia region, the annual number of extreme hot months shows an increasing trend over time. 
-# Under models M1–M4, the Poisson regression fitted curves all show the expected count rising with year.
-# This suggests that, after controlling for long term trend and seasonality,
-# the frequency of unusually warm months increased overall from 1900 to 2012,
-# where unusually warm months are defined as residuals exceeding the baseline Q95 threshold.
+# (3) Yearly extreme-hot months with quasi-Poisson trend
+# In Siberia, the annual number of extreme-hot months shows an overall upward trend over time.
+# Under models M1-M4, the quasi-Poisson fitted curves all indicate an increasing expected count with year.
+# This suggests that, under the residual-based Q95 definition,
+# the frequency of unusually warm months increased overall from 1900 to 2012.
 
 # create prediction data for model
 make_pred <- function(yearly_ext, fit_pois, model_name, count_col) {
@@ -357,14 +361,14 @@ ext_hot <- ggplot(pred_all, aes(x = year)) +
   annotate("rect", xmin = min(bly), xmax = max(bly), ymin = -Inf, ymax = Inf, alpha = 0.12) +
   # 95% confidence interval band for fitted mean
   geom_ribbon(aes(ymin = lo, ymax = hi), alpha = 0.18) +
-  # fitted Poisson mean curve
+  # fitted Quasi-Poisson mean curve
   geom_line(aes(y = fit), linewidth = 1) +
   # observed yearly counts
   geom_line(aes(y = extreme_months), alpha = 0.85) +
   geom_point(aes(y = extreme_months), size = 1.0) +
   
   facet_wrap(~ model, ncol = 2, scales = "free_y") +
-  labs(title = "Siberia: Yearly Extreme Hot Months with Poisson Trend",
+  labs(title = "Siberia: Yearly Extreme Hot Months with Quasi-Poisson Trend",
     x = "Year",
     y = "Extreme Hot Months Per Year",
   ) +
