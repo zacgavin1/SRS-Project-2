@@ -407,7 +407,207 @@ c(length(which(best_order_BIC == 1)), length(which(best_order_BIC == 2)),
 
 
 
+# Now test if more orders of the trend component are needed in the second order 
+# harmonics model
 
+
+# Siberia
+AIC_order1 <- AIC_order2 <- AIC_order3 <- matrix(0,n_lon_S, n_lat_S)
+BIC_order1 <- BIC_order2 <- BIC_order3 <- matrix(0,n_lon_S, n_lat_S)
+best_order_AIC <- best_order_BIC <- matrix(0,n_lon_S, n_lat_S)
+
+for (i in 1:n_lon_S) {
+  for (j in 1:n_lat_S) {
+    
+    y <- temp_Siberia[i, j, ]
+    
+    # Remove missing values if needed
+    if (all(is.na(y))) next
+    
+    # First order
+    mod1 <- lm(y ~ t + sin1 + cos1 + sin2 + cos2 + t:sin1 + t:cos1
+               + t:sin2 + t:cos2)
+    
+    # Second order
+    mod2 <- lm(y ~ I(t^2) + sin1 + cos1 + sin2 + cos2 + t:sin1 + t:cos1
+               + t:sin2 + t:cos2)
+    
+    # Third order
+    mod3 <- lm(y ~ I(t^3) + sin1 + cos1 + sin2 + cos2 +
+                 t:sin1 + t:cos1 + t:sin2 + t:cos2)
+    
+    AIC_order1[i,j] <- AIC(mod1)
+    AIC_order2[i,j] <- AIC(mod2)
+    AIC_order3[i,j] <- AIC(mod3)
+    
+    BIC_order1[i,j] <- BIC(mod1)
+    BIC_order2[i,j] <- BIC(mod2)
+    BIC_order3[i,j] <- BIC(mod3)
+    
+    
+    best_order_AIC[i,j] <- which.min(
+      c(AIC_order1[i,j],
+        AIC_order2[i,j],
+        AIC_order3[i,j])
+    )
+    
+    best_order_BIC[i,j] <- which.min(
+      c(BIC_order1[i,j],
+        BIC_order2[i,j],
+        BIC_order3[i,j])
+    )
+  }
+}
+
+c(length(which(best_order_AIC == 1)), length(which(best_order_AIC == 2)),
+  length(which(best_order_AIC == 3)))
+
+# [1] 312 257 231
+
+c(length(which(best_order_BIC == 1)), length(which(best_order_BIC == 2)),
+  length(which(best_order_BIC == 3)))
+
+# [1] 728  68   4
+
+
+
+# Ireland
+AIC_order1 <- AIC_order2 <- AIC_order3 <- matrix(0,n_lon_I, n_lat_I)
+BIC_order1 <- BIC_order2 <- BIC_order3 <- matrix(0,n_lon_I, n_lat_I)
+best_order_AIC <- best_order_BIC <- matrix(0,n_lon_I, n_lat_I)
+
+for (i in 1:n_lon_I) {
+  for (j in 1:n_lat_I) {
+    
+    y <- temp_Ireland[i, j, ]
+    
+    # Remove missing values if needed
+    if (all(is.na(y))) next
+    
+    # First order
+    mod1 <- lm(y ~ t + sin1 + cos1 + sin2 + cos2 + t:sin1 + t:cos1
+               + t:sin2 + t:cos2)
+    
+    # Second order
+    mod2 <- lm(y ~ I(t^2) + sin1 + cos1 + sin2 + cos2 + t:sin1 + t:cos1
+               + t:sin2 + t:cos2)
+    
+    # Third order
+    mod3 <- lm(y ~ I(t^3) + sin1 + cos1 + sin2 + cos2 +
+                 t:sin1 + t:cos1 + t:sin2 + t:cos2)
+    
+    AIC_order1[i,j] <- AIC(mod1)
+    AIC_order2[i,j] <- AIC(mod2)
+    AIC_order3[i,j] <- AIC(mod3)
+    
+    BIC_order1[i,j] <- BIC(mod1)
+    BIC_order2[i,j] <- BIC(mod2)
+    BIC_order3[i,j] <- BIC(mod3)
+    
+    
+    best_order_AIC[i,j] <- which.min(
+      c(AIC_order1[i,j],
+        AIC_order2[i,j],
+        AIC_order3[i,j])
+    )
+    
+    best_order_BIC[i,j] <- which.min(
+      c(BIC_order1[i,j],
+        BIC_order2[i,j],
+        BIC_order3[i,j])
+    )
+  }
+}
+
+c(length(which(best_order_AIC == 1)), length(which(best_order_AIC == 2)),
+  length(which(best_order_AIC == 3)))
+
+# [1]  0 93  7
+
+c(length(which(best_order_BIC == 1)), length(which(best_order_BIC == 2)),
+  length(which(best_order_BIC == 3)))
+
+# [1] 43 57  0
+
+
+
+# Amazon
+AIC_order1 <- AIC_order2 <- AIC_order3 <- matrix(0,n_lon_A, n_lat_A)
+BIC_order1 <- BIC_order2 <- BIC_order3 <- matrix(0,n_lon_A, n_lat_A)
+best_order_AIC <- best_order_BIC <- matrix(0,n_lon_A, n_lat_A)
+
+for (i in 1:n_lon_A) {
+  for (j in 1:n_lat_A) {
+    
+    y <- temp_Amazon[i, j, ]
+    
+    # Remove missing values if needed
+    if (all(is.na(y))) next
+    
+    # First order
+    mod1 <- lm(y ~ t + sin1 + cos1 + sin2 + cos2 + t:sin1 + t:cos1
+               + t:sin2 + t:cos2)
+    
+    # Second order
+    mod2 <- lm(y ~ I(t^2) + sin1 + cos1 + sin2 + cos2 + t:sin1 + t:cos1
+               + t:sin2 + t:cos2)
+    
+    # Third order
+    mod3 <- lm(y ~ I(t^3) + sin1 + cos1 + sin2 + cos2 +
+                 t:sin1 + t:cos1 + t:sin2 + t:cos2)
+    
+    AIC_order1[i,j] <- AIC(mod1)
+    AIC_order2[i,j] <- AIC(mod2)
+    AIC_order3[i,j] <- AIC(mod3)
+    
+    BIC_order1[i,j] <- BIC(mod1)
+    BIC_order2[i,j] <- BIC(mod2)
+    BIC_order3[i,j] <- BIC(mod3)
+    
+    
+    best_order_AIC[i,j] <- which.min(
+      c(AIC_order1[i,j],
+        AIC_order2[i,j],
+        AIC_order3[i,j])
+    )
+    
+    best_order_BIC[i,j] <- which.min(
+      c(BIC_order1[i,j],
+        BIC_order2[i,j],
+        BIC_order3[i,j])
+    )
+  }
+}
+
+c(length(which(best_order_AIC == 1)), length(which(best_order_AIC == 2)),
+  length(which(best_order_AIC == 3)))
+
+# [1]  0 252 938
+
+c(length(which(best_order_BIC == 1)), length(which(best_order_BIC == 2)),
+  length(which(best_order_BIC == 3)))
+
+# [1]  3 472 715
+
+
+# 1) When testing additive terms: i.e)
+# t vs t + t^2 vs t + t^2 + t^3
+
+# AIC and BIC lead to inconclusive results. The trend is significantly different
+# from region to region
+
+# 2) When testing singular terms i.e)
+# t vs t^2 vs t^3
+
+# AIC and BIC indicate that the cubic term is preferred 
+
+
+
+
+# Instead consider generalised additive of model of the following form:
+# Temp = s(trend) + Seasonality + ARMA errors + noise
+# This will be done below the ARIMA analysis.
+# NEVERMIND TAKES SO LONG TO RUN
 
 
 # Look at the 2nd order model in more detail. In particular, we want to look at the
@@ -513,10 +713,14 @@ image.plot(lon[lon_ii_I],
            col = topo.colors(50))
 
 
-plot(temp_Ireland[n_lon_I, n_lat_I, ])
+plot(temp_Ireland[n_lon_I, n_lat_I, 1000:1344])
+lines(fitted(mod2_reduced), col = "red")
+lines(fitted(mod2), col = "blue")
+
+# Showing significant results but model fits look very similar
 
 
-n_lon_I
+
 # Amazon
 models_list_A <- list()
 interaction_pvals_A <- matrix(NA, n_lon_A, n_lat_A)
@@ -559,7 +763,8 @@ image.plot(lon[lon_ii_A],
            col = topo.colors(50))
 
 
-
+# Seasonality changing in continental and temperate regions but not in
+# tropical areas ?
 
 
 
@@ -730,8 +935,119 @@ sum(resids2[[220]]^2)
 
 
 
+#### Using the model that accounts for correlated errors, test for changes in
+# seasonality using likelihood ratio test
+xreg_full <- cbind(
+  t,
+  sin1, cos1,
+  sin2, cos2,
+  t*sin1, t*cos1,
+  t*sin2, t*cos2
+)
+
+xreg_reduced <- cbind(
+  t,
+  sin1, cos1,
+  sin2, cos2
+)
 
 
+# Amazon
+pvals_A <- matrix(NA, n_lon_A, n_lat_A)
+
+for(i in 1:n_lon_A){
+  for(j in 1:n_lat_A){
+    
+    y <- temp_Amazon[i,j,]
+    if(all(is.na(y))) next
+    
+    mod_full <- arima(y, order=c(1,0,1), xreg=xreg_full, method="ML")
+    mod_reduced  <- arima(y, order=c(1,0,1), xreg=xreg_reduced, method="ML")
+    
+    LR <- 2*(mod_full$loglik - mod_reduced$loglik)
+    
+    pvals_A[i,j] <- pchisq(LR, df=4, lower.tail=FALSE)
+  }
+}
+
+pvals_adj_A <- p.adjust(as.vector(pvals_A), method="BH")
+pvals_adj_A <- matrix(pvals_adj_A, n_lon_A, n_lat_A)
+pvals_adj_A
+
+p_vals_adj_sig_A <- pvals_adj_A < 0.05
+
+saveRDS(p_vals_adj_sig_A , "likelihood_ratio_pvalues_Amazon.rds")
+
+# p_vals_adj_sig_A <- readRDS("likelihood_ratio_pvalues.rds")
+
+
+
+
+
+
+
+# GAM approach
+library(mgcv)
+
+
+# Ireland
+models_I <- list()
+resids_I = list()
+
+for(i in 1:n_lon_I){
+  for(j in 1:n_lat_I){
+    
+    y <- temp_Ireland[i,j,]
+    
+    if(all(is.na(y))) next
+    
+    fit <- gam(
+      y ~ s(t, k = 10) +
+        sin1 + cos1 +
+        sin2 + cos2 +
+        t:sin1 + t:cos1 +
+        t:sin2 + t:cos2
+    )
+    
+    models_I[[paste0("lon",i,"_lat",j)]] <- fit
+    resids_I[[paste0("lon", i, "_lat", j)]] <- residuals(fit)
+  }
+}
+
+acf(resids_I[[50]])
+pacf(resids_I[[50]])
+
+# ARMA(1,1) is still appropriate for this model
+
+
+# !!!! Takes AGES to run (1 grid every ~10 mins)
+
+
+# Ireland
+models_I <- list()
+resids_I = list()
+
+for(i in 1:n_lon_I){
+  for(j in 1:n_lat_I){
+    
+    y <- temp_Ireland[i,j,]
+    
+    if(all(is.na(y))) next
+    
+    fit <- gamm(
+      y ~ s(t, k = 10) +
+        sin1 + cos1 +
+        sin2 + cos2 +
+        t:sin1 + t:cos1 +
+        t:sin2 + t:cos2,
+      correlation = corARMA(p=1,q=1)
+    )
+    
+    models_I[[paste0("lon",i,"_lat",j)]] <- fit$gam
+  }
+}
+
+modeacf(models_
 ################################################################################
 ######################## Extreme Temperature/Anomalies  ########################
 ################################################################################
