@@ -80,31 +80,6 @@ months <- month(data)
 
 year <- unique(years)
 
-# Global temperature plots of first and last recording
-# par(mfrow = c(2,1), mar = c(3,3,2,5))
-# image.plot(temp[,,1], col = rev(brewer.pal(10,"RdBu")), main = "Global Temp 01/1901")
-# image.plot(temp[,,1344], col = rev(brewer.pal(10,"RdBu")), main ="Global Temp 01/2012")
-# 
-# Global temperature plot of 112 year difference
-# image.plot(temp[,,1344] - temp[,,1], col = rev(brewer.pal(10,"RdBu")), 
-#            main ="Temp differences 111 years apart")
-
-
-
-# Initial look at global mean temperature increase over the time period 
-obs_mean <- apply(tmp, 3, mean, na.rm=T) # this take a while
-yearly_mean <- rep(NA, length(years))
-for (i in years){
-  yearly_mean[i-1900] <- mean(obs_mean[year==i])
-}
-
-plot(years, yearly_mean - mean(yearly_mean[1:20]), ylim=c(-.3,1.5))
-fit <- smooth.spline(years, yearly_mean - mean(yearly_mean[1:20]))
-lines(fit, col="purple", lwd="2") # wait, climate change is real??
-
-
-
-
 
 
 # Define a testing region. These are the coordinates for central Siberia as 
@@ -147,11 +122,12 @@ temp_Ireland <- tmp[lon_ii_S, lat_ii_S,]
 n_lon_I <- length(lon_ii_I)
 n_lat_I <- length(lat_ii_I)
 
+
 # Amazon - Tropical: Defined by consistently high temperatures with weak seasonal
 #                    temperature variation
 
 lon_ii_A <- which(lon > -70 & lon < -50)
-lat_ii_A <- which(lat > -10 & lat < 5)
+lat_ii_A <- which(lat > -10 & lat < -5)
 temp_Amazon <- tmp[lon_ii_A, lat_ii_A, ]
 
 n_lon_A <- length(lon_ii_A)
@@ -159,8 +135,6 @@ n_lat_A <- length(lat_ii_A)
 
 
 n_time <- dim(tmp)[3]
-
-
 
 
 
@@ -208,8 +182,7 @@ n_time <- dim(tmp)[3]
 
 ## Fit harmonic models
 
-# Using all siberian grid points to test on
-# Model over entire time period
+
 # Define time period and frequency of periodic cycles
 
 t <- 1:n_time
@@ -425,15 +398,15 @@ for (i in 1:n_lon_S) {
     if (all(is.na(y))) next
     
     # First order
-    mod1 <- lm(y ~ t + sin1 + cos1 + sin2 + cos2 + t:sin1 + t:cos1
+    mod1 <- lm(y ~ poly(t, 1) + sin1 + cos1 + sin2 + cos2 + t:sin1 + t:cos1
                + t:sin2 + t:cos2)
     
     # Second order
-    mod2 <- lm(y ~ I(t^2) + sin1 + cos1 + sin2 + cos2 + t:sin1 + t:cos1
+    mod2 <- lm(y ~ poly(t,2) + sin1 + cos1 + sin2 + cos2 + t:sin1 + t:cos1
                + t:sin2 + t:cos2)
     
     # Third order
-    mod3 <- lm(y ~ I(t^3) + sin1 + cos1 + sin2 + cos2 +
+    mod3 <- lm(y ~ poly(t,3) + sin1 + cos1 + sin2 + cos2 +
                  t:sin1 + t:cos1 + t:sin2 + t:cos2)
     
     AIC_order1[i,j] <- AIC(mod1)
@@ -462,12 +435,10 @@ for (i in 1:n_lon_S) {
 c(length(which(best_order_AIC == 1)), length(which(best_order_AIC == 2)),
   length(which(best_order_AIC == 3)))
 
-# [1] 312 257 231
 
 c(length(which(best_order_BIC == 1)), length(which(best_order_BIC == 2)),
   length(which(best_order_BIC == 3)))
 
-# [1] 728  68   4
 
 
 
@@ -489,7 +460,7 @@ for (i in 1:n_lon_I) {
                + t:sin2 + t:cos2)
     
     # Second order
-    mod2 <- lm(y ~ I(t^2) + sin1 + cos1 + sin2 + cos2 + t:sin1 + t:cos1
+    mod2 <- lm(y ~ poly(t, 3) + sin1 + cos1 + sin2 + cos2 + t:sin1 + t:cos1
                + t:sin2 + t:cos2)
     
     # Third order
@@ -522,12 +493,10 @@ for (i in 1:n_lon_I) {
 c(length(which(best_order_AIC == 1)), length(which(best_order_AIC == 2)),
   length(which(best_order_AIC == 3)))
 
-# [1]  0 93  7
 
 c(length(which(best_order_BIC == 1)), length(which(best_order_BIC == 2)),
   length(which(best_order_BIC == 3)))
 
-# [1] 43 57  0
 
 
 
@@ -579,15 +548,15 @@ for (i in 1:n_lon_A) {
   }
 }
 
+
+AIC_order1 - AIC_order3
 c(length(which(best_order_AIC == 1)), length(which(best_order_AIC == 2)),
   length(which(best_order_AIC == 3)))
 
-# [1]  0 252 938
 
 c(length(which(best_order_BIC == 1)), length(which(best_order_BIC == 2)),
   length(which(best_order_BIC == 3)))
 
-# [1]  3 472 715
 
 
 # 1) When testing additive terms: i.e)
@@ -854,18 +823,18 @@ resids <- list()
 
 for (i in 1:n_lon_block) {
   for (j in 1:n_lat_block) {
-    
+
     y <- temp_test[i, j, ]
-    
+
     if (all(is.na(y))) next
-    
-    mod2 <- lm(y ~ t + sin1 + cos1 + sin2 + cos2 + 
+
+    mod2 <- lm(y ~ t + sin1 + cos1 + sin2 + cos2 +
                  t:sin1 + t:cos1 + t:sin2 + t:cos2)
-    
+
     models_list[[paste0("lon", i, "_lat", j)]] <- mod2
-    
+
     resids[[paste0("lon", i, "_lat", j)]] <- residuals(mod2)
-    
+
   }
 }
 
@@ -937,8 +906,44 @@ sum(resids2[[220]]^2)
 
 #### Using the model that accounts for correlated errors, test for changes in
 # seasonality using likelihood ratio test
+
+library(forecast)
+
+arma_orders_MA <- matrix(NA, n_lon_A, n_lat_A)
+arma_orders_AR <- matrix(NA, n_lon_A, n_lat_A)
+
+for(i in 1:n_lon_A){
+  for(j in 1:n_lat_A){
+    
+    y <- temp_Amazon[i,j,]
+    
+    if(all(is.na(y))) next
+    
+    mod <- lm(
+      y ~ t + sin1 + cos1 + sin2 + cos2 +
+        t:sin1 + t:cos1 + t:sin2 + t:cos2
+    )
+    
+    res <- residuals(mod)
+    
+    arma_fit <- auto.arima(
+      res,
+      max.p = 3,
+      max.q = 3,
+      seasonal = FALSE,
+      ic = "bic"
+    )
+    
+    arma_orders_AR[i,j] <- arma_fit$arma[1] 
+    arma_orders_MA[i,j] <- arma_fit$arma[2]
+  }
+}
+
+
+# Testing if Seasonality is present
+
 xreg_full <- cbind(
-  t,
+  t^3,
   sin1, cos1,
   sin2, cos2,
   t*sin1, t*cos1,
@@ -946,10 +951,70 @@ xreg_full <- cbind(
 )
 
 xreg_reduced <- cbind(
-  t,
+  t^3,
   sin1, cos1,
   sin2, cos2
 )
+
+
+
+# Siberia
+pvals_S <- matrix(NA, n_lon_S, n_lat_S)
+for(i in 1:n_lon_S){
+  for(j in 1:n_lat_S){
+    
+    y <- temp_Siberia[i,j,]
+    if(all(is.na(y))) next
+    
+    mod_full <- arima(y, order=c(1,0,1), xreg=xreg_full, method="ML")
+    mod_reduced  <- arima(y, order=c(1,0,1), xreg=xreg_reduced, method="ML")
+    
+    LR <- 2*(mod_full$loglik - mod_reduced$loglik)
+    
+    pvals_S[i,j] <- pchisq(LR, df=4, lower.tail=FALSE)
+  }
+}
+
+
+pvals_adj_S <- p.adjust(as.vector(pvals_S), method="BH")
+pvals_adj_S <- matrix(pvals_adj_S, n_lon_S, n_lat_S)
+
+
+pvals_adj_S < 0.05
+p_vals_adj_sig_S <- t(pvals_adj_S) < 0.05
+
+p_vals_adj_sig_S
+
+# saveRDS(p_vals_adj_sig_S , "likelihood_ratio_pvalues_Siberia.rds")
+
+
+# Ireland
+pvals_I <- matrix(NA, n_lon_I, n_lat_I)
+
+for(i in 1:n_lon_I){
+  for(j in 1:n_lat_I){
+    
+    y <- temp_Ireland[i,j,]
+    if(all(is.na(y))) next
+    
+    mod_full <- arima(y, order=c(1,0,1), xreg=xreg_full, method="ML")
+    mod_reduced  <- arima(y, order=c(1,0,1), xreg=xreg_reduced, method="ML")
+    
+    LR <- 2*(mod_full$loglik - mod_reduced$loglik)
+    
+    pvals_I[i,j] <- pchisq(LR, df=4, lower.tail=FALSE)
+  }
+}
+
+pvals_adj_I <- p.adjust(as.vector(pvals_I), method="BH")
+pvals_adj_I <- matrix(pvals_adj_I, n_lon_I, n_lat_I)
+
+
+p_vals_adj_sig_I <- t(pvals_adj_I) < 0.05
+p_vals_adj_sig_I
+
+# saveRDS(p_vals_adj_sig_I , "likelihood_ratio_pvalues_Ireland.rds")
+
 
 
 # Amazon
@@ -969,10 +1034,12 @@ for(i in 1:n_lon_A){
     pvals_A[i,j] <- pchisq(LR, df=4, lower.tail=FALSE)
   }
 }
+pvals_A < 0.05
 
 pvals_adj_A <- p.adjust(as.vector(pvals_A), method="BH")
 pvals_adj_A <- matrix(pvals_adj_A, n_lon_A, n_lat_A)
-pvals_adj_A
+
+pvals_adj_A < 0.05
 
 p_vals_adj_sig_A <- pvals_adj_A < 0.05
 
@@ -981,12 +1048,12 @@ saveRDS(p_vals_adj_sig_A , "likelihood_ratio_pvalues_Amazon.rds")
 # p_vals_adj_sig_A <- readRDS("likelihood_ratio_pvalues.rds")
 
 
+?p.adjust
 
 
 
 
-
-# GAM approach
+# GAM approach =================================================================
 library(mgcv)
 
 
@@ -1047,7 +1114,7 @@ for(i in 1:n_lon_I){
   }
 }
 
-modeacf(models_
+m
 ################################################################################
 ######################## Extreme Temperature/Anomalies  ########################
 ################################################################################
