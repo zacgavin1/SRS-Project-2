@@ -1,44 +1,27 @@
 ###
-# Extreme-hot months are defined using residuals from the non-ARMA trend-seasonality models.
-# After controlling for long-term trend and seasonality, a residual is computed as:
-# residual = observed temperature - model-predicted temperature.
-# Using residuals removes the variation explained by trend and seasonality,
-# thereby isolating temperature anomalies and reducing the direct influence of long-term warming.
-# A month is classified as an extreme-hot month if its residual exceeds the baseline-period Q95 threshold,
-# and is coded as 1; otherwise it is coded as 0.
-# This gives each month a binary 0/1 indicator of whether it is unusually warm relative to the fitted baseline.
-# ARMA models are used for fit and autocorrelation diagnostics only,
-# and are not used to define or interpret extreme-hot months.
+# Across the three regions, the monthly temperature series are seasonal,
+# which motivates modelling trend and seasonality explicitly before defining extremes using residuals.
+# We define an extreme-hot month as one in which the residual exceeds the baseline-period Q95 threshold.
+#
+# Under this residual-based definition, Siberia shows a clear and statistically significant increase
+# in the frequency of extreme-hot months. For the non-ARMA models (M1-M3),
+# the estimated decadal rate ratios are consistently above 1,
+# and this conclusion is broadly robust to the choice of baseline period.
+#
+# Amazon also shows evidence of a statistically significant increase under the linear-trend specification.
+# The estimated decadal rate ratios for the non-ARMA models are above 1,
+# indicating that extreme-hot months become more frequent over time.
+#
+# In contrast, Ireland shows no statistically detectable long-run increase under the same definition.
+# Its estimated decadal rate ratios are close to 1, and the corresponding confidence intervals include 1.
+#
+# The regional comparison also suggests differences in seasonal structure.
+# Ireland and especially Siberia show strong seasonal variation,
+# while Amazon is less strongly seasonal but still exhibits substantial variability.
+# In Siberia, the seasonal pattern appears more complex than a simple sinusoid,
+# so a flexible month-factor specification performs best among the non-ARMA models.
 ###
-# The main baseline period is 1901-1930.
-# A sensitivity analysis is carried out using multiple 30-year baseline windows:
-# 1901-1930, 1931-1960, 1961-1990, and 1981-2010.
-# For the non-ARMA models (M1-M3), the sensitivity analysis is used to assess
-# whether the substantive conclusion depends on the choice of baseline period.
-###
-# A quasi-Poisson regression is used to test for a temporal trend because the outcome is a yearly count
-# of extreme-hot months, and temporal clustering may induce overdispersion.
-# The model is:
-# log(lambda_y) = alpha + beta * year + log(n_months),
-# where lambda_y is the expected number of extreme-hot months in year y.
-# The coefficient beta represents the change associated with a one-year increase.
-# Because this yearly effect is usually small, it is converted to a per-decade change
-# to better match the long-run scale of the research question.
-# This trend analysis is interpreted for the non-ARMA models only.
-###
-# Pipeline:
-#  1) Read NetCDF by time slices
-#  2) Compute area-weighted monthly mean temperature
-#  3) Fit 4 candidate models:
-#     M1: year + factor(month)
-#     M2: year + 1st harmonic
-#     M3: year + 2nd harmonic
-#     M4: M3 + ARMA errors (used for fit/diagnostic comparison only)
-#  4) Define residual-based extreme-hot months using only the non-ARMA residuals (M1-M3)
-#     together with baseline Q95 thresholds
-#  5) Count extreme-hot months per year and test for trend using quasi-Poisson regression
-#     for the non-ARMA models only
-###
+# Region: Amazon bbox
 
 library(ncdf4)
 library(lubridate)
@@ -49,11 +32,11 @@ library(ggplot2)
 nc_path <- "C:/Users/86187/Desktop/Assignment 2/temp_data_SRS/temp_data_SRS.nc"
 vn <- "tmp"
 
-# Choose latitude and longitude
-LON_MIN <- -10
-LON_MAX <- -5
-LAT_MIN <- 51
-LAT_MAX <- 56
+# Choose latitude and longitude (Amazon bbox)
+LON_MIN <- -70
+LON_MAX <- -50
+LAT_MIN <- -10
+LAT_MAX <- 5
 
 # Convert NetCDF "days since 1900-01-01" time to Date
 trsdate <- function(nc, time_var = "time") {
@@ -74,7 +57,7 @@ mharmonics <- function(monthv, K = 2, period = 12) {
 }
 
 # Compute area-weighted monthly mean temperature time series
-month_mean_tep <- function(nc_path, vn = "tmp", lon_min = -11, lon_max = -5, lat_min = 51,  lat_max = 56) {
+month_mean_tep <- function(nc_path, vn = "tmp", lon_min = 103.6, lon_max = 104.1, lat_min = 1.15,  lat_max = 1.50) {
   nc <- nc_open(nc_path)
   on.exit(nc_close(nc), add = TRUE)
   
@@ -192,7 +175,7 @@ xreg_m4 <- as.matrix(df_m3 %>% select(year_c, sin1, cos1, sin2, cos2))
 
 # choose ARMA(p,q) for M4 by AIC (p,q <= 2)
 # restrict the candidate orders to low values to avoid overfitting
-# For each (p,q), fitting the model by maximum likelihood, 
+# For each (p,q), fitting the model by maximum likelihood,
 # and then select the (p,q) with the smallest AIC as the error-term structure for Model M4
 grid <- expand.grid(p = 0:2, q = 0:2)
 grid$aic <- NA_real_
@@ -228,12 +211,12 @@ comparison <- tibble(
   AIC = c(AIC(m1), AIC(m2), AIC(m3), m4$aic),
   BIC = c(BIC(m1), BIC(m2), BIC(m3), AIC(m4, k = log(nrow(df_m3))))
 )
-# In the Ireland region, the information criteria suggest that M1 and M3 provide very similar fits
-# among the non-ARMA models, while M2 performs worst.
-# This suggests that a first-order harmonic is too coarse to capture Ireland's seasonal structure,
-# whereas a month-factor or second-order harmonic specification provides a better fit.
-# The ARMA model is retained for fit and autocorrelation diagnostics only,
-# and is not used in the extreme-hot-month analysis below.
+# In the Amazon region, M4 clearly provides the best fit by a large margin in terms of AIC/BIC.
+# This indicates strong residual temporal dependence that is not captured by the simple non-ARMA models.
+# Among the non-ARMA specifications, M1 and M3 perform better than M2,
+# suggesting that a single first-order harmonic is too restrictive to represent the seasonal structure.
+# Overall, the model comparison suggests that the Amazon monthly temperature series contains
+# both weak seasonality and substantial serial dependence.
 print(comparison)
 
 # Residuals
@@ -243,11 +226,10 @@ df$res_m3 <- resid(m3)
 df$res_m4 <- as.numeric(residuals(m4))
 
 # Sensitivity analysis for different baseline periods
-# For the non-ARMA models (M1-M3), the sensitivity analysis shows that
-# the estimated per-decade rate ratios remain close to 1 across alternative baseline periods.
-# Their confidence intervals include 1 and the corresponding p-values remain above 0.05.
-# This suggests that the conclusion of no detectable long-run trend in Ireland
-# is robust to the choice of baseline period.
+# A sensitivity analysis across alternative 30-year baselines shows that
+# the estimated decadal rate ratios are consistently above 1, and all trend estimates remain statistically significant.
+# This indicates that the conclusion of an increasing frequency of extreme-hot months in Amazon
+# is broadly robust to the choice of baseline period.
 baseline_sets <- list(
   "1901-1930" = 1901:1930,
   "1931-1960" = 1931:1960,
@@ -285,7 +267,7 @@ sens_table <- bind_rows(
       M1 = trend_one(df$res_m1, df$year, bly_i),
       M2 = trend_one(df$res_m2, df$year, bly_i),
       M3 = trend_one(df$res_m3, df$year, bly_i),
-      M4 = trend_one(df$res_m3, df$year, bly_i),
+      M4 = trend_one(df$res_m4, df$year, bly_i),
       .id = "model"
     ) %>% mutate(baseline = bn, .before = 1)
   })
@@ -305,9 +287,6 @@ th_m4 <- thresholds(df$res_m4, df$year, bly)
 df$ext_m1 <- ext_indicator(df$res_m1, th_m1)
 df$ext_m2 <- ext_indicator(df$res_m2, th_m2)
 df$ext_m3 <- ext_indicator(df$res_m3, th_m3)
-# Extreme-hot-month classification is based on the non-ARMA residuals only.
-# The ARMA model is retained for fit and autocorrelation diagnostics,
-# and is not used in the substantive analysis of extreme-hot months.
 df$ext_m4 <- ext_indicator(df$res_m3, th_m3)
 
 # Yearly extreme month counts and Quasi-Poisson trend tests
@@ -338,47 +317,42 @@ trend_table <- bind_rows(
   .id = "model"
 )
 
-# For the non-ARMA models (M1-M3), the estimated 10-year rate ratios are all very close to 1,
-# with 95% confidence intervals spanning 1 and p-values greater than 0.05.
-# This indicates no statistically detectable long-term trend
-# in the frequency of extreme-hot months in Ireland under this definition.
+# There is clear statistical evidence of a long-term increase in the frequency of extreme-hot months in Amazon from 1900 to 2012.
+# Estimated decadal rate ratios are consistently above 1 (around 1.16-1.20),
+# and all 95% confidence intervals lie above 1 across the four model specifications.
 print(trend_table)
 
 # Plots
 # (1) monthly mean temperature
-# Figure (1) shows a strong and persistent annual seasonal cycle in Ireland's monthly mean temperature,
-# with clear summer peaks and winter troughs throughout the record.
-# Seasonal variation dominates the series, so any long-run change is not immediately visible by eye.
-# This motivates modelling trend and seasonality explicitly before defining extreme months using residuals.
+# The Amazon monthly mean temperature series shows relatively weak seasonality compared with strongly seasonal regions such as Ireland or Siberia.
+# Most temperatures lie within a fairly narrow tropical range, but the series still shows substantial month-to-month variability
+# and a visible upward shift in the later part of the record.
 ggplot(df, aes(x = date, y = temp)) +
   geom_line() +
-  labs(title = "Irland Monthly Mean Temperature",
-       subtitle = paste0("Irland lon[", LON_MIN, ",", LON_MAX, "], lat[", LAT_MIN, ",", LAT_MAX, "]"),
+  labs(title = "Amazon Monthly Mean Temperature",
+       subtitle = paste0("Amazon lon[", LON_MIN, ",", LON_MAX, "], lat[", LAT_MIN, ",", LAT_MAX, "]"),
        x = "Date", y = "Temp (°C)") +
   theme_minimal()
 
 # (2) Residuals with thresholds
-# After accounting for long-term trend and seasonality under the non-ARMA specification,
-# the residual series fluctuates around zero.
-# Months exceeding the baseline Q95 threshold occur throughout the record,
-# but they do not appear to become systematically more frequent over time.
-# This visual impression is consistent with the absence of a significant long-run trend
-# in the yearly counts of extreme-hot months.
-ggplot(df, aes(x = date, y = res_m3)) +
+# After removing trend and seasonality, the residual series fluctuates around zero.
+# Exceedances of the baseline Q95 threshold occur throughout the record,
+# and they appear to become more frequent in the later decades,
+# which is consistent with the positive trend found in the yearly extreme-month counts.
+ggplot(df, aes(x = date, y = res_m1)) +
   geom_line() +
-  geom_hline(yintercept = th_m3$q95, linetype = 2) +
-  geom_hline(yintercept = th_m3$q05, linetype = 2) +
-  labs(title = paste0("Ireland Residuals (M3) with Baseline Thresholds (", min(bly), "-", max(bly), ")"),
+  geom_hline(yintercept = th_m1$q95, linetype = 2) +
+  geom_hline(yintercept = th_m1$q05, linetype = 2) +
+  labs(title = paste0("Amazon Residuals (M1) with Baseline Thresholds (", min(bly), "-", max(bly), ")"),
        subtitle = "Extreme Hot Month: residual > baseline Q95",
        x = "Date", y = "Residual (°C)") +
   theme_minimal()
 
 # (3) Yearly extreme-hot months with quasi-Poisson trend
-# The annual count of extreme-hot months fluctuates between 0 and 4, with most years recording 0 or 1.
-# For the non-ARMA models (M1-M3), the fitted quasi-Poisson trends remain broadly stable over time,
-# with only very small model-dependent differences.
-# This provides no evidence of a statistically significant long-run increase
-# in the frequency of extreme-hot months in Ireland.
+# In Amazon, the annual number of extreme-hot months increases over time under all four specifications.
+# Although the yearly counts remain noisy, the fitted quasi-Poisson trends are consistently upward sloping.
+# Together with the confidence intervals and p-values, this provides robust evidence of a long-run increase
+# in the frequency of extreme-hot months in Amazon.
 
 # create prediction data for model
 make_pred <- function(yearly_ext, fit_pois, model_name, count_col) {
@@ -386,14 +360,14 @@ make_pred <- function(yearly_ext, fit_pois, model_name, count_col) {
   pr_link <- predict(fit_pois, type = "link", se.fit = TRUE)
   eta <- as.numeric(pr_link$fit)
   se<- as.numeric(pr_link$se.fit)
-
+  
   out <- data.frame(
     year = yearly_ext$year,
     model = model_name,
     extreme_months = yearly_ext[[count_col]],
     fit = as.numeric(predict(fit_pois, type = "response")),
-    lo = exp(eta - 1.96 * se),
-    hi = exp(eta + 1.96 * se)
+    lo  = exp(eta - 1.96 * se),
+    hi  = exp(eta + 1.96 * se)
   )
   out
 }
@@ -416,11 +390,11 @@ ext_hot <- ggplot(pred_all, aes(x = year)) +
   # observed yearly counts
   geom_line(aes(y = extreme_months), alpha = 0.85) +
   geom_point(aes(y = extreme_months), size = 1.0) +
-
+  
   facet_wrap(~ model, ncol = 2, scales = "free_y") +
-  labs(title = "Ireland: Yearly Extreme Hot Months with Quasi-Poisson Trend",
-    x = "Year",
-    y = "Extreme Hot Months Per Year",
+  labs(title = "Amazon: Yearly Extreme Hot Months with Quasi-Poisson Trend",
+       x = "Year",
+       y = "Extreme Hot Months Per Year",
   ) +
   theme_minimal() +
   theme(

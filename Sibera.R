@@ -10,10 +10,10 @@ nc_path <- "C:/Users/86187/Desktop/Assignment 2/temp_data_SRS/temp_data_SRS.nc"
 vn <- "tmp"
 
 # Choose latitude and longitude (Siberia bbox)
-LON_MIN <- 60
-LON_MAX <- 180
-LAT_MIN <- 50
-LAT_MAX <- 75
+LON_MIN <- 90
+LON_MAX <- 110
+LAT_MIN <- 55
+LAT_MAX <- 65
 
 # Convert NetCDF "days since 1900-01-01" time to Date
 trsdate <- function(nc, time_var = "time") {
@@ -188,12 +188,15 @@ comparison <- tibble(
   AIC = c(AIC(m1), AIC(m2), AIC(m3), m4$aic),
   BIC = c(BIC(m1), BIC(m2), BIC(m3), AIC(m4, k = log(nrow(df_m3))))
 )
-# In the Siberia region, the information criteria indicate that M1 provides the best fit among the main candidate models,
-# achieving the lowest AIC and BIC.
-# By contrast, M2 and M3 perform substantially worse, indicating that low-order harmonic terms are not flexible enough
+# In the Siberia region, M1 provides the best fit among the non-ARMA models,
+# while M2 and M3 perform substantially worse.
+# This indicates that low-order harmonic terms are not flexible enough
 # to capture the seasonal structure of monthly temperature in this region.
-# This suggests that Siberia’s seasonality is relatively complex and deviates from a simple sinusoidal form,
-# so a flexible month-factor specification is preferred for the main analysis.
+# The pattern suggests that Siberia's seasonality is relatively complex
+# and deviates from a simple sinusoidal form, so a flexible month-factor specification
+# is preferred for the main non-ARMA analysis.
+# The ARMA model is retained for fit and autocorrelation diagnostics only,
+# and is not used in the extreme-hot-month analysis below.
 print(comparison)
 
 # Residuals
@@ -203,11 +206,13 @@ df$res_m3 <- resid(m3)
 df$res_m4 <- as.numeric(residuals(m4))
 
 # Sensitivity analysis for different baseline periods
-# A sensitivity analysis across multiple 30-year baselines shows that the estimated per-decade rate ratios are consistently above 1,
-# and the direction of the trend remains positive across all models and baseline choices.
-# Statistical significance is strongest for M1 and under the earliest and latest baselines,
-# while some intermediate baseline-model combinations are only marginally non-significant.
-# Overall, the conclusion of an increasing frequency of extreme-hot months in Siberia is not driven by a single baseline choice.
+# A sensitivity analysis across multiple 30-year baselines shows that,
+# for the non-ARMA models (M1-M3), the estimated per-decade rate ratios are consistently above 1.
+# The direction of the trend remains positive across all baseline choices.
+# Statistical significance is strongest for M1, while M2 and M3 are somewhat weaker under some baselines,
+# though the overall pattern remains upward.
+# Overall, the conclusion of an increasing frequency of extreme-hot months in Siberia
+# is not driven by a single baseline choice.
 baseline_sets <- list(
   "1901-1930" = 1901:1930,
   "1931-1960" = 1931:1960,
@@ -295,15 +300,20 @@ trend_table <- bind_rows(
   .id = "model"
 )
 
-# All models have p < 0.05, and the confidence intervals do not cross 1.
-# In the Siberian region, the incidence of extreme hot months has significantly increased over time.
-# The estimated percentage changes every 10 years under different models range approximately from +7% to +10% every 10 years.
+# For the non-ARMA models (M1-M3), the p-values are below 0.05
+# and the confidence intervals for the 10-year multipliers lie above 1.
+# This indicates a statistically significant increase over time
+# in the frequency of extreme-hot months in Siberia.
+# The estimated per-decade increases are approximately 9% to 12% across M1-M3.
 print(trend_table)
 
 # Plots
 # (1) monthly mean temperature
-# The temperature can drop to around -30 in winter and rise above 10 in summer.
-# The fluctuations are much greater than those in Ireland.
+# Figure (1) shows a very strong annual seasonal cycle in Siberia's monthly mean temperature.
+# Temperatures fall far below 0°C in winter and rise well above 10°C in summer,
+# so seasonal variation dominates the series.
+# This seasonal amplitude is much larger than in Ireland or Amazon,
+# which motivates careful modelling of seasonality before defining extreme months from residuals.
 ggplot(df, aes(x = date, y = temp)) +
   geom_line() +
   labs(title = "Siberia Monthly Mean Temperature",
@@ -312,9 +322,12 @@ ggplot(df, aes(x = date, y = temp)) +
   theme_minimal()
 
 # (2) Residuals with thresholds
-# The residual series fluctuates around zero after removing trend and seasonality.
+# After accounting for long-term trend and seasonality under the non-ARMA specification,
+# the residual series fluctuates around zero.
 # Exceedances of the baseline Q95 threshold occur throughout the record,
-# but they appear more frequent in later decades, which is consistent with an increase in extreme-hot months over time.
+# but they appear more frequent in later decades.
+# This visual pattern is consistent with an increase over time
+# in the frequency of extreme-hot months in Siberia.
 ggplot(df, aes(x = date, y = res_m1)) +
   geom_line() +
   geom_hline(yintercept = th_m1$q95, linetype = 2) +
@@ -325,10 +338,9 @@ ggplot(df, aes(x = date, y = res_m1)) +
   theme_minimal()
 
 # (3) Yearly extreme-hot months with quasi-Poisson trend
-# In Siberia, the annual number of extreme-hot months shows an overall upward trend over time.
-# Under models M1-M4, the quasi-Poisson fitted curves all indicate an increasing expected count with year.
-# This suggests that, under the residual-based Q95 definition,
-# the frequency of unusually warm months increased overall from 1900 to 2012.
+# The yearly counts of extreme-hot months remain variable,
+# but for the non-ARMA models (M1-M3) the fitted quasi-Poisson trends are consistently upward sloping.
+# This provides evidence of a long-run increase in the frequency of extreme-hot months in Siberia.
 
 # create prediction data for model
 make_pred <- function(yearly_ext, fit_pois, model_name, count_col) {

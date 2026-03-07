@@ -1,44 +1,4 @@
-###
-# Extreme-hot months are defined using residuals from the non-ARMA trend-seasonality models.
-# After controlling for long-term trend and seasonality, a residual is computed as:
-# residual = observed temperature - model-predicted temperature.
-# Using residuals removes the variation explained by trend and seasonality,
-# thereby isolating temperature anomalies and reducing the direct influence of long-term warming.
-# A month is classified as an extreme-hot month if its residual exceeds the baseline-period Q95 threshold,
-# and is coded as 1; otherwise it is coded as 0.
-# This gives each month a binary 0/1 indicator of whether it is unusually warm relative to the fitted baseline.
-# ARMA models are used for fit and autocorrelation diagnostics only,
-# and are not used to define or interpret extreme-hot months.
-###
-# The main baseline period is 1901-1930.
-# A sensitivity analysis is carried out using multiple 30-year baseline windows:
-# 1901-1930, 1931-1960, 1961-1990, and 1981-2010.
-# For the non-ARMA models (M1-M3), the sensitivity analysis is used to assess
-# whether the substantive conclusion depends on the choice of baseline period.
-###
-# A quasi-Poisson regression is used to test for a temporal trend because the outcome is a yearly count
-# of extreme-hot months, and temporal clustering may induce overdispersion.
-# The model is:
-# log(lambda_y) = alpha + beta * year + log(n_months),
-# where lambda_y is the expected number of extreme-hot months in year y.
-# The coefficient beta represents the change associated with a one-year increase.
-# Because this yearly effect is usually small, it is converted to a per-decade change
-# to better match the long-run scale of the research question.
-# This trend analysis is interpreted for the non-ARMA models only.
-###
-# Pipeline:
-#  1) Read NetCDF by time slices
-#  2) Compute area-weighted monthly mean temperature
-#  3) Fit 4 candidate models:
-#     M1: year + factor(month)
-#     M2: year + 1st harmonic
-#     M3: year + 2nd harmonic
-#     M4: M3 + ARMA errors (used for fit/diagnostic comparison only)
-#  4) Define residual-based extreme-hot months using only the non-ARMA residuals (M1-M3)
-#     together with baseline Q95 thresholds
-#  5) Count extreme-hot months per year and test for trend using quasi-Poisson regression
-#     for the non-ARMA models only
-###
+# Region: Sibera bbox
 
 library(ncdf4)
 library(lubridate)
@@ -50,10 +10,10 @@ nc_path <- "C:/Users/86187/Desktop/Assignment 2/temp_data_SRS/temp_data_SRS.nc"
 vn <- "tmp"
 
 # Choose latitude and longitude
-LON_MIN <- -10
-LON_MAX <- -5
-LAT_MIN <- 51
-LAT_MAX <- 56
+LON_MIN <- 90
+LON_MAX <- 110
+LAT_MIN <- 55
+LAT_MAX <- 65
 
 # Convert NetCDF "days since 1900-01-01" time to Date
 trsdate <- function(nc, time_var = "time") {
@@ -74,7 +34,7 @@ mharmonics <- function(monthv, K = 2, period = 12) {
 }
 
 # Compute area-weighted monthly mean temperature time series
-month_mean_tep <- function(nc_path, vn = "tmp", lon_min = -11, lon_max = -5, lat_min = 51,  lat_max = 56) {
+month_mean_tep <- function(nc_path, vn = "tmp", lon_min = 103, lon_max = 105, lat_min = 1, lat_max = 2) {
   nc <- nc_open(nc_path)
   on.exit(nc_close(nc), add = TRUE)
   
@@ -96,7 +56,7 @@ month_mean_tep <- function(nc_path, vn = "tmp", lon_min = -11, lon_max = -5, lat
   wlat <- cos(lat[lat_idx] * pi / 180)
   W <- matrix(rep(wlat, each = length(lon_idx)), nrow = length(lon_idx), ncol = length(lat_idx))
   
-  ir_mean <- rep(NA_real_, nt)
+  sg_mean <- rep(NA_real_, nt)
   
   lon_start <- min(lon_idx)
   lat_start <- min(lat_idx)
@@ -113,7 +73,7 @@ month_mean_tep <- function(nc_path, vn = "tmp", lon_min = -11, lon_max = -5, lat
     
     u <- !is.na(slice)
     if (any(u)) {
-      ir_mean[ti] <- sum(slice[u] * W[u]) / sum(W[u])
+      sg_mean[ti] <- sum(slice[u] * W[u]) / sum(W[u])
     }
   }
   
@@ -121,7 +81,7 @@ month_mean_tep <- function(nc_path, vn = "tmp", lon_min = -11, lon_max = -5, lat
     date = dates,
     year = year(dates),
     month = month(dates),
-    temp = ir_mean
+    temp = sg_mean
   ) %>% filter(!is.na(temp))
 }
 
@@ -140,25 +100,28 @@ ext_indicator <- function(residualv, th) {
   as.integer(residualv > th$q95)
 }
 
-# Fit Quasi-Poisson trend for yearly extreme counts
+# Fit Quasi-Poisson trend for yearly extreme counts using cubic time trend
 fit_trend <- function(countv, years, exposure) {
-  glm(countv ~ years, family = quasipoisson(link = "log"), offset = log(exposure))
+  years_c <- years - mean(years)
+  glm(countv ~ I(years_c^3),
+      family = quasipoisson(link = "log"),
+      offset = log(exposure))
 }
 
-# Extract "per 10-year multiplier" from Quasi-Poisson model
+# Extract cubic trend coefficient from Quasi-Poisson model
 ext_trend <- function(glm_fit) {
-  b <- coef(glm_fit)["years"]
-  se <- sqrt(vcov(glm_fit)["years", "years"])
+  term_name <- "I(years_c^3)"
+  b <- coef(glm_fit)[term_name]
+  se <- sqrt(vcov(glm_fit)[term_name, term_name])
   
   coefs <- summary(glm_fit)$coefficients
   pcol <- if ("Pr(>|z|)" %in% colnames(coefs)) "Pr(>|z|)" else "Pr(>|t|)"
   
   tibble(
-    beta_year = b,
-    mult_per_10yr = exp(b * 10),
-    ci_low = exp((b - 1.96 * se) * 10),
-    ci_high = exp((b + 1.96 * se) * 10),
-    p_value = coefs["years", pcol]
+    beta_year_cubed = b,
+    ci_low = b - 1.96 * se,
+    ci_high = b + 1.96 * se,
+    p_value = coefs[term_name, pcol]
   )
 }
 
@@ -168,6 +131,7 @@ df <- month_mean_tep(nc_path, vn, lon_min = LON_MIN, lon_max = LON_MAX, lat_min 
 # Center year for numerical stability
 df$year_c  <- df$year - mean(df$year)
 df$t_index <- seq_len(nrow(df))
+df$year_c3 <- df$year_c^3
 
 # Add harmonic seasonal regressors to represent monthly cyclic seasonality
 H1 <- mharmonics(df$month, K = 1)
@@ -178,21 +142,21 @@ df_m2 <- bind_cols(df, H1)
 df_m3 <- bind_cols(df, H2)
 
 ## fit model M1~4
-# M1: year + factor(month)
-m1 <- lm(temp ~ year_c + factor(month), data = df)
+# M1: t^3 + factor(month)
+m1 <- lm(temp ~ year_c3 + factor(month), data = df)
 
-# M2: year + 1st harmonic
-m2 <- lm(temp ~ year_c + sin1 + cos1, data = df_m2)
+# M2: t^3 + 1st harmonic
+m2 <- lm(temp ~ year_c3 + sin1 + cos1, data = df_m2)
 
-# M3: year + 2nd harmonic
-m3 <- lm(temp ~ year_c + sin1 + cos1 + sin2 + cos2, data = df_m3)
+# M3: t^3 + 2nd harmonic
+m3 <- lm(temp ~ year_c3 + sin1 + cos1 + sin2 + cos2, data = df_m3)
 
 # M4: M3 + ARMA errors
-xreg_m4 <- as.matrix(df_m3 %>% select(year_c, sin1, cos1, sin2, cos2))
+xreg_m4 <- as.matrix(df_m3 %>% select(year_c3, sin1, cos1, sin2, cos2))
 
 # choose ARMA(p,q) for M4 by AIC (p,q <= 2)
 # restrict the candidate orders to low values to avoid overfitting
-# For each (p,q), fitting the model by maximum likelihood, 
+# For each (p,q), fitting the model by maximum likelihood,
 # and then select the (p,q) with the smallest AIC as the error-term structure for Model M4
 grid <- expand.grid(p = 0:2, q = 0:2)
 grid$aic <- NA_real_
@@ -221,17 +185,20 @@ m4 <- arima(df_m3$temp, order = arma_order, xreg = xreg_m4, include.mean = TRUE,
 
 # Model comparison (AIC/BIC)
 comparison <- tibble(
-  model = c("M1: year + factor(month)",
-            "M2: year + 1st harmonic",
-            "M3: year + 2nd harmonic",
+  model = c("M1: t^3 + factor(month)",
+            "M2: t^3 + 1st harmonic",
+            "M3: t^3 + 2nd harmonic",
             paste0("M4: M3 + ARMA(", arma_order[1], ",", arma_order[2], ",", arma_order[3], ") errors")),
   AIC = c(AIC(m1), AIC(m2), AIC(m3), m4$aic),
   BIC = c(BIC(m1), BIC(m2), BIC(m3), AIC(m4, k = log(nrow(df_m3))))
 )
-# In the Ireland region, the information criteria suggest that M1 and M3 provide very similar fits
-# among the non-ARMA models, while M2 performs worst.
-# This suggests that a first-order harmonic is too coarse to capture Ireland's seasonal structure,
-# whereas a month-factor or second-order harmonic specification provides a better fit.
+# In the Siberia region, M1 provides the best fit among the non-ARMA models,
+# while M2 and M3 perform less well.
+# This suggests that low-order harmonic terms are not flexible enough
+# to capture the seasonal structure of monthly temperature in this region.
+# The pattern indicates that Siberia's seasonality is relatively complex
+# and not well represented by a simple sinusoidal form, so a flexible month-factor specification
+# is preferred for the main non-ARMA analysis.
 # The ARMA model is retained for fit and autocorrelation diagnostics only,
 # and is not used in the extreme-hot-month analysis below.
 print(comparison)
@@ -243,11 +210,12 @@ df$res_m3 <- resid(m3)
 df$res_m4 <- as.numeric(residuals(m4))
 
 # Sensitivity analysis for different baseline periods
-# For the non-ARMA models (M1-M3), the sensitivity analysis shows that
-# the estimated per-decade rate ratios remain close to 1 across alternative baseline periods.
-# Their confidence intervals include 1 and the corresponding p-values remain above 0.05.
-# This suggests that the conclusion of no detectable long-run trend in Ireland
-# is robust to the choice of baseline period.
+# A sensitivity analysis across alternative 30-year baselines shows that,
+# for the non-ARMA models (M1-M3), the estimated cubic trend coefficients are consistently positive.
+# Statistical significance is strongest under the earlier baselines,
+# while the evidence becomes weaker for some model-baseline combinations under later baselines.
+# Overall, the pattern remains consistent with an increasing frequency of extreme-hot months in Siberia,
+# although the strength of evidence depends somewhat on the baseline choice and model specification.
 baseline_sets <- list(
   "1901-1930" = 1901:1930,
   "1931-1960" = 1931:1960,
@@ -268,13 +236,17 @@ trend_one <- function(residual_vec, years_vec, baseline_years) {
   
   yearly <- tibble(years = years_vec, ext = ext) %>%
     group_by(years) %>%
-    summarise(n_months = n(), extreme_months = sum(ext, na.rm = TRUE), .groups = "drop")
+    summarise(n_months = n(), extreme_months = sum(ext, na.rm = TRUE), .groups = "drop") %>%
+    mutate(years_c = years - mean(years))
   
-  fit <- glm(extreme_months ~ years, family = quasipoisson(link = "log"), offset = log(n_months), data = yearly)
+  fit <- glm(extreme_months ~ I(years_c^3),
+             family = quasipoisson(link = "log"),
+             offset = log(n_months),
+             data = yearly)
   
   ext_trend(fit) %>%
     mutate(q95 = th$q95) %>%
-    select(q95, beta_year, mult_per_10yr, ci_low, ci_high, p_value)
+    select(q95, beta_year_cubed, ci_low, ci_high, p_value)
 }
 
 sens_table <- bind_rows(
@@ -290,8 +262,13 @@ sens_table <- bind_rows(
     ) %>% mutate(baseline = bn, .before = 1)
   })
 )
-
+# For the non-ARMA models (M1-M3), the sensitivity analysis shows that
+# the estimated cubic trend coefficients remain positive across alternative baseline periods.
+# Although significance varies across models and baselines,
+# the overall pattern is consistent with an upward nonlinear trend
+# in the frequency of extreme-hot months in Siberia.
 print(sens_table)
+
 # Choose baseline
 bly <- baseline_sets[["1901-1930"]]
 
@@ -305,9 +282,10 @@ th_m4 <- thresholds(df$res_m4, df$year, bly)
 df$ext_m1 <- ext_indicator(df$res_m1, th_m1)
 df$ext_m2 <- ext_indicator(df$res_m2, th_m2)
 df$ext_m3 <- ext_indicator(df$res_m3, th_m3)
-# Extreme-hot-month classification is based on the non-ARMA residuals only.
-# The ARMA model is retained for fit and autocorrelation diagnostics,
-# and is not used in the substantive analysis of extreme-hot months.
+# For extreme classification, use non-ARMA residuals (M3) rather than ARMA residuals,
+# so that persistence is not absorbed by the error model.
+# As a result, the M4 trend panel uses the same extreme-month classification as M3,
+# while M4 itself is retained for model-fit and autocorrelation diagnostics.
 df$ext_m4 <- ext_indicator(df$res_m3, th_m3)
 
 # Yearly extreme month counts and Quasi-Poisson trend tests
@@ -338,62 +316,64 @@ trend_table <- bind_rows(
   .id = "model"
 )
 
-# For the non-ARMA models (M1-M3), the estimated 10-year rate ratios are all very close to 1,
-# with 95% confidence intervals spanning 1 and p-values greater than 0.05.
-# This indicates no statistically detectable long-term trend
-# in the frequency of extreme-hot months in Ireland under this definition.
+# For the non-ARMA models (M1-M3), the estimated coefficients on the cubic time term are positive,
+# their 95% confidence intervals lie above 0 for the main baseline period,
+# and the p-values are below 0.05.
+# This indicates statistically significant evidence of a nonlinear long-run increase
+# in the frequency of extreme-hot months in Siberia under this definition.
 print(trend_table)
 
 # Plots
 # (1) monthly mean temperature
-# Figure (1) shows a strong and persistent annual seasonal cycle in Ireland's monthly mean temperature,
-# with clear summer peaks and winter troughs throughout the record.
-# Seasonal variation dominates the series, so any long-run change is not immediately visible by eye.
-# This motivates modelling trend and seasonality explicitly before defining extreme months using residuals.
+# Figure (1) shows a very strong annual seasonal cycle in Siberia's monthly mean temperature.
+# Temperatures fall far below 0°C in winter and rise well above 10°C in summer,
+# so seasonal variation dominates the series.
+# The annual temperature range is much larger than in Ireland or Amazon,
+# which motivates careful modelling of seasonality before defining extreme months from residuals.
 ggplot(df, aes(x = date, y = temp)) +
   geom_line() +
-  labs(title = "Irland Monthly Mean Temperature",
-       subtitle = paste0("Irland lon[", LON_MIN, ",", LON_MAX, "], lat[", LAT_MIN, ",", LAT_MAX, "]"),
+  labs(title = "Sibera Monthly Mean Temperature",
+       subtitle = paste0("Sibera lon[", LON_MIN, ",", LON_MAX, "], lat[", LAT_MIN, ",", LAT_MAX, "]"),
        x = "Date", y = "Temp (°C)") +
   theme_minimal()
 
 # (2) Residuals with thresholds
-# After accounting for long-term trend and seasonality under the non-ARMA specification,
+# After removing long-term trend and seasonality under the non-ARMA specification,
 # the residual series fluctuates around zero.
-# Months exceeding the baseline Q95 threshold occur throughout the record,
-# but they do not appear to become systematically more frequent over time.
-# This visual impression is consistent with the absence of a significant long-run trend
-# in the yearly counts of extreme-hot months.
+# Exceedances of the baseline Q95 threshold occur throughout the record,
+# and they appear somewhat more frequent in the later part of the series.
+# This visual pattern is consistent with a nonlinear increase
+# in the frequency of extreme-hot months over time.
 ggplot(df, aes(x = date, y = res_m3)) +
   geom_line() +
   geom_hline(yintercept = th_m3$q95, linetype = 2) +
   geom_hline(yintercept = th_m3$q05, linetype = 2) +
-  labs(title = paste0("Ireland Residuals (M3) with Baseline Thresholds (", min(bly), "-", max(bly), ")"),
+  labs(title = paste0("Sibera Residuals (M3) with Baseline Thresholds (", min(bly), "-", max(bly), ")"),
        subtitle = "Extreme Hot Month: residual > baseline Q95",
        x = "Date", y = "Residual (°C)") +
   theme_minimal()
 
 # (3) Yearly extreme-hot months with quasi-Poisson trend
-# The annual count of extreme-hot months fluctuates between 0 and 4, with most years recording 0 or 1.
-# For the non-ARMA models (M1-M3), the fitted quasi-Poisson trends remain broadly stable over time,
-# with only very small model-dependent differences.
-# This provides no evidence of a statistically significant long-run increase
-# in the frequency of extreme-hot months in Ireland.
+# In Siberia, the annual number of extreme-hot months shows an overall nonlinear upward trend over time.
+# For the non-ARMA models (M1-M3), the fitted quasi-Poisson curves rise over the long run,
+# although substantial year-to-year variability remains.
+# This indicates an increase in the frequency of extreme-hot months in Siberia
+# under the residual-based definition, especially toward the later part of the record.
 
 # create prediction data for model
 make_pred <- function(yearly_ext, fit_pois, model_name, count_col) {
   # Predict on link scale to get standard errors (log scale)
   pr_link <- predict(fit_pois, type = "link", se.fit = TRUE)
   eta <- as.numeric(pr_link$fit)
-  se<- as.numeric(pr_link$se.fit)
-
+  se <- as.numeric(pr_link$se.fit)
+  
   out <- data.frame(
     year = yearly_ext$year,
     model = model_name,
     extreme_months = yearly_ext[[count_col]],
     fit = as.numeric(predict(fit_pois, type = "response")),
-    lo = exp(eta - 1.96 * se),
-    hi = exp(eta + 1.96 * se)
+    lo  = exp(eta - 1.96 * se),
+    hi  = exp(eta + 1.96 * se)
   )
   out
 }
@@ -416,12 +396,10 @@ ext_hot <- ggplot(pred_all, aes(x = year)) +
   # observed yearly counts
   geom_line(aes(y = extreme_months), alpha = 0.85) +
   geom_point(aes(y = extreme_months), size = 1.0) +
-
   facet_wrap(~ model, ncol = 2, scales = "free_y") +
-  labs(title = "Ireland: Yearly Extreme Hot Months with Quasi-Poisson Trend",
-    x = "Year",
-    y = "Extreme Hot Months Per Year",
-  ) +
+  labs(title = "Sibera: Yearly Extreme Hot Months with Quasi-Poisson Trend",
+       x = "Year",
+       y = "Extreme Hot Months Per Year") +
   theme_minimal() +
   theme(
     plot.title   = element_text(size = 12),
