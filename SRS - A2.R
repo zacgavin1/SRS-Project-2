@@ -116,7 +116,7 @@ n_lat_S <- length(lat_ii_S)
 
 lon_ii_I <- which(lon > -10 & lon < -5)
 lat_ii_I <- which(lat > 51 & lat < 56)
-temp_Ireland <- tmp[lon_ii_S, lat_ii_S,]
+temp_Ireland <- tmp[lon_ii_I, lat_ii_I,]
 
 
 n_lon_I <- length(lon_ii_I)
@@ -327,14 +327,14 @@ for (i in 1:n_lon_A) {
     if (all(is.na(y))) next
     
     # First order
-    mod1 <- lm(y ~ t + sin1 + cos1 + t:sin1 + t:cos1)
+    mod1 <- lm(y ~ poly(t,3) + sin1 + cos1 + t:sin1 + t:cos1)
     
     # Second order
-    mod2 <- lm(y ~ t + sin1 + cos1 + sin2 + cos2 + t:sin1 + t:cos1
+    mod2 <- lm(y ~ poly(t,3)  + sin1 + cos1 + sin2 + cos2 + t:sin1 + t:cos1
                + t:sin2 + t:cos2)
     
     # Third order
-    mod3 <- lm(y ~ t + sin1 + cos1 + sin2 + cos2 +  sin3 + cos3 +
+    mod3 <- lm(y ~ poly(t,3)  + sin1 + cos1 + sin2 + cos2 +  sin3 + cos3 +
                  t:sin1 + t:cos1 + t:sin2 + t:cos2 + t:sin3 + t:cos3)
     
     AIC_order1[i,j] <- AIC(mod1)
@@ -360,6 +360,7 @@ for (i in 1:n_lon_A) {
   }
 }
 
+AIC_order2 - AIC_order3
 c(length(which(best_order_AIC == 1)), length(which(best_order_AIC == 2)),
   length(which(best_order_AIC == 3)))
 
@@ -380,8 +381,15 @@ c(length(which(best_order_BIC == 1)), length(which(best_order_BIC == 2)),
 
 
 
-# Now test if more orders of the trend component are needed in the second order 
-# harmonics model
+# Testing BIC for primary 3 models 
+# Model 1: Factor(months)
+# Model 2: Semi-annual harmonics
+# Model 3: Semi-annual harmonics and ARMA errors
+
+xreg <- cbind(
+  poly(t,3),
+  sin1, cos1,
+  sin2, cos2)
 
 
 # Siberia
@@ -394,20 +402,19 @@ for (i in 1:n_lon_S) {
     
     y <- temp_Siberia[i, j, ]
     
-    # Remove missing values if needed
+
     if (all(is.na(y))) next
     
-    # First order
-    mod1 <- lm(y ~ poly(t, 1) + sin1 + cos1 + sin2 + cos2 + t:sin1 + t:cos1
-               + t:sin2 + t:cos2)
+    mod1 <- lm(y ~ poly(t, 3) + as.factor(months))
     
-    # Second order
-    mod2 <- lm(y ~ poly(t,2) + sin1 + cos1 + sin2 + cos2 + t:sin1 + t:cos1
-               + t:sin2 + t:cos2)
+    mod2 <- lm(y ~ poly(t,3) + sin1 + cos1 + sin2 + cos2)
     
-    # Third order
-    mod3 <- lm(y ~ poly(t,3) + sin1 + cos1 + sin2 + cos2 +
-                 t:sin1 + t:cos1 + t:sin2 + t:cos2)
+    mod3 <- arima(
+      y,
+      order = c(1,0,1),   
+      xreg = xreg,
+      method = "ML"
+    )
     
     AIC_order1[i,j] <- AIC(mod1)
     AIC_order2[i,j] <- AIC(mod2)
@@ -455,17 +462,16 @@ for (i in 1:n_lon_I) {
     # Remove missing values if needed
     if (all(is.na(y))) next
     
-    # First order
-    mod1 <- lm(y ~ t + sin1 + cos1 + sin2 + cos2 + t:sin1 + t:cos1
-               + t:sin2 + t:cos2)
+    mod1 <- lm(y ~ poly(t, 3) + as.factor(months))
     
-    # Second order
-    mod2 <- lm(y ~ poly(t, 3) + sin1 + cos1 + sin2 + cos2 + t:sin1 + t:cos1
-               + t:sin2 + t:cos2)
+    mod2 <- lm(y ~ poly(t,3) + sin1 + cos1 + sin2 + cos2)
     
-    # Third order
-    mod3 <- lm(y ~ I(t^3) + sin1 + cos1 + sin2 + cos2 +
-                 t:sin1 + t:cos1 + t:sin2 + t:cos2)
+    mod3 <- arima(
+      y,
+      order = c(1,0,1),   
+      xreg = xreg,
+      method = "ML"
+    )
     
     AIC_order1[i,j] <- AIC(mod1)
     AIC_order2[i,j] <- AIC(mod2)
@@ -489,7 +495,6 @@ for (i in 1:n_lon_I) {
     )
   }
 }
-
 c(length(which(best_order_AIC == 1)), length(which(best_order_AIC == 2)),
   length(which(best_order_AIC == 3)))
 
@@ -513,17 +518,16 @@ for (i in 1:n_lon_A) {
     # Remove missing values if needed
     if (all(is.na(y))) next
     
-    # First order
-    mod1 <- lm(y ~ t + sin1 + cos1 + sin2 + cos2 + t:sin1 + t:cos1
-               + t:sin2 + t:cos2)
+    mod1 <- lm(y ~ poly(t, 3) + as.factor(months))
     
-    # Second order
-    mod2 <- lm(y ~ I(t^2) + sin1 + cos1 + sin2 + cos2 + t:sin1 + t:cos1
-               + t:sin2 + t:cos2)
+    mod2 <- lm(y ~ poly(t,3) + sin1 + cos1 + sin2 + cos2)
     
-    # Third order
-    mod3 <- lm(y ~ I(t^3) + sin1 + cos1 + sin2 + cos2 +
-                 t:sin1 + t:cos1 + t:sin2 + t:cos2)
+    mod3 <- arima(
+      y,
+      order = c(1,0,1),   
+      xreg = xreg,
+      method = "ML"
+    )
     
     AIC_order1[i,j] <- AIC(mod1)
     AIC_order2[i,j] <- AIC(mod2)
@@ -549,7 +553,7 @@ for (i in 1:n_lon_A) {
 }
 
 
-AIC_order1 - AIC_order3
+BIC_order1 - BIC_order3
 c(length(which(best_order_AIC == 1)), length(which(best_order_AIC == 2)),
   length(which(best_order_AIC == 3)))
 
@@ -723,6 +727,8 @@ p_adjusted_sig_A
 
 
 
+# Map p-values 
+
 image.plot(lon[lon_ii_A],
            lat[lat_ii_A],
            p_adjusted_A,
@@ -849,7 +855,7 @@ pacf(resids[[100]])
 
 
 xreg <- cbind(
-  t,
+  poly(t,3), 
   sin1, cos1,
   sin2, cos2,
   t*sin1, t*cos1,
@@ -943,7 +949,7 @@ for(i in 1:n_lon_A){
 # Testing if Seasonality is present
 
 xreg_full <- cbind(
-  t^3,
+  poly(t,3),
   sin1, cos1,
   sin2, cos2,
   t*sin1, t*cos1,
@@ -951,7 +957,7 @@ xreg_full <- cbind(
 )
 
 xreg_reduced <- cbind(
-  t^3,
+  poly(t,3),
   sin1, cos1,
   sin2, cos2
 )
@@ -980,9 +986,7 @@ pvals_adj_S <- p.adjust(as.vector(pvals_S), method="BH")
 pvals_adj_S <- matrix(pvals_adj_S, n_lon_S, n_lat_S)
 
 
-pvals_adj_S < 0.05
-p_vals_adj_sig_S <- t(pvals_adj_S) < 0.05
-
+p_vals_adj_sig_S <- pvals_adj_S < 0.05
 p_vals_adj_sig_S
 
 # saveRDS(p_vals_adj_sig_S , "likelihood_ratio_pvalues_Siberia.rds")
@@ -1013,8 +1017,10 @@ pvals_adj_I <- matrix(pvals_adj_I, n_lon_I, n_lat_I)
 p_vals_adj_sig_I <- t(pvals_adj_I) < 0.05
 p_vals_adj_sig_I
 
-# saveRDS(p_vals_adj_sig_I , "likelihood_ratio_pvalues_Ireland.rds")
+temp_Ireland
 
+# saveRDS(p_vals_adj_sig_I , "likelihood_ratio_pvalues_Ireland.rds")
+temp_Ireland
 
 
 # Amazon
@@ -1047,12 +1053,38 @@ saveRDS(p_vals_adj_sig_A , "likelihood_ratio_pvalues_Amazon.rds")
 
 # p_vals_adj_sig_A <- readRDS("likelihood_ratio_pvalues.rds")
 
-
-?p.adjust
-
-
+install.packages("spatialEco")
+library(spatialEco)
 
 
+
+png("Seasonality_Test.png", width = 6*320, height = 4*300, res = 300)
+image.plot(region_S_lon,
+           region_S_lat,
+           pvals_adj_S[, ncol(pvals_adj_S):1],
+           col = tim.colors(64),
+           legend.width = 2,
+           xlab = "Longitude",
+           ylab = "Latitude",
+           axis.args = list(
+             at = c(0, 0.05, 0.1, 0.2, 0.4),  # include 0.05
+             labels = c("0.0", "0.05", "0.1", "0.2", "0.4"),
+             cex.axis = 1.0))
+
+
+
+contour(region_S_lon,
+        region_S_lat,
+        pvals_adj_S[, ncol(pvals_adj_S):1],
+        levels = 0.05,
+        add = TRUE,
+        drawlabels = FALSE,
+        lwd = 2.5,
+        col = "black",
+        lty = 2)
+dev.off()
+?contour
+?image.plot
 # GAM approach =================================================================
 library(mgcv)
 
